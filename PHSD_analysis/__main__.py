@@ -1,0 +1,673 @@
+import numpy as np
+import os # to get the path of the current directory
+import re
+import pandas as pd
+import argparse
+from math import pi
+from scipy import stats
+from . import *
+
+###############################################################################
+__doc__ = """Analyse the PHSD.dat files, output and plot observables"""
+###############################################################################
+parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument(
+        '--folder', type=str, default='./',
+        help='folder containing the TmunuTAU.dat file or the job_# folders to analyse')
+parser.add_argument(
+        '--BMIN', type=float, default=None,
+        help='Select BMIN')
+parser.add_argument(
+        '--BMAX', type=float, default=None,
+        help='Select BMAX')
+parser.add_argument(
+        '--midrapy', type=float, default=0.5,
+        help='Select mid-rapidity region |y| < midrapy')
+parser.add_argument(
+        '--midrapeta', type=float, default=0.5,
+        help='Select mid-rapidity region |eta| < midrapeta')
+parser.add_argument(
+        '--ybin', type=float, default=0.25,
+        help='bin in y')
+parser.add_argument(
+        '--etabin', type=float, default=0.25,
+        help='bin in eta')
+parser.add_argument(
+        '--pTbin', type=float, default=0.25,
+        help='bin in pT')
+parser.add_argument(
+        '--mTbin', type=float, default=0.25,
+        help='bin in mT')
+args = parser.parse_args()
+
+# info about the analysis
+xBMIN = args.BMIN
+xBMAX = args.BMAX
+midrapy = args.midrapy
+midrapeta = args.midrapeta
+ybin = args.ybin
+etabin = args.etabin
+pTbin = args.pTbin
+mTbin = args.mTbin
+# path where to look for files
+path = args.folder
+
+########################################################################
+dir_path = os.path.dirname(os.path.realpath(__file__)) # path where the script is
+print(f'Current directory: {dir_path}')
+print(f'Looking for files in: {path}')
+
+########################################################################
+def detect_files():
+    """
+    Detect if there is a phsd.dat file in the folder
+    OR folders denoted as job_#
+    OR ask if nothing is found
+    """
+
+    # get all files/folders in path
+    entries_all = os.listdir(str(path))
+
+    # where to read the files
+    path_input = []
+    path_folders = []
+    path_files = []
+
+    # try to find a match with phsd.dat first in the current folder
+    for xfile in entries_all:
+        if(xfile == 'phsd.dat'):
+            path_files = [path+xfile]
+
+    # if it didn't work
+    if(len(path_files) == 0):
+        # try to find a match with folders as job_#
+        for xfold in entries_all:
+            match = re.match('job_([0-9]+)', xfold)
+            try:
+                match = match.group(1)
+                path_folders += [path+xfold]
+            except:
+                pass
+
+        # now check is there is actually a phsd.dat in the selected folders
+        for xfold in path_folders:
+            files_all = os.listdir(str(xfold))
+            for xfile in files_all:
+                if(xfile == 'phsd.dat'):
+                    path_files += [xfold+'/'+xfile]
+
+    # just read inputPHSD once
+    path_input = path_files[0].replace('phsd.dat','inputPHSD')
+
+    # display list of folders found
+    print(f'\nThese files have been found: {path_files}')
+
+    return path_input,path_files
+
+########################################################################
+def read_input(path_input):
+    """
+    Read inputPHSD file and display information
+    """
+    inputf = {}
+    with open (path_input,"r") as inputfile:
+        for line in inputfile:
+            list_line=line.split()
+            if(len(list_line)==0):
+                continue
+            inputf.update({list_line[1].replace(':',''): float(list_line[0].replace(',',''))})
+
+    global xBMIN
+    global xBMAX
+    # check impact param
+    if(xBMIN==None):
+        xBMIN = inputf['BMIN']
+    elif((xBMIN!=None) and (xBMIN < inputf['BMIN'])):
+        xBMIN = inputf['BMIN']
+        print('Entered BMIN changed to min value in b')
+    if(xBMAX==None):
+        xBMAX = inputf['BMAX']
+    elif((xBMAX!=None) and (xBMAX > inputf['BMAX'])):
+        xBMAX = inputf['BMAX']
+        print('Entered BMAX changed to max value in b')
+
+    # nuclei information
+    N1 = nuclei[inputf["MASSTA"]]
+    N2 = nuclei[inputf["MASSPR"]]
+
+    if(inputf['IGLUE'] == 0):
+        print('      __ __  ____  ___                        ')
+        print('     / // / / __/ / _ \                       ')
+        print('    / _  / _\ \  / // /                       ')
+        print('   /_//_/ /___/ /____/ ____  __ ____ ____ ___ ')
+        print('  / _ |  / |/ // _ |  / /\ \/ // __//  _// __/')
+        print(' / __ | /    // __ | / /__\  /_\ \ _/ / _\ \  ')
+        print('/_/ |_|/_/|_//_/ |_|/____//_//___//___//___/  ')
+        print('                                              ')
+    else:
+        print('       ___   __ __ ____ ___                   ')
+        print('      / _ \ / // // __// _ \                  ')
+        print('     / ___// _  /_\ \ / // /                  ')
+        print('    /_/   /_//_//__ //____/  __ ____ ____ ____')
+        print('  / _ |  / |/ // _ |  / /\ \/ // __//  _// __/')
+        print(' / __ | /    // __ | / /__\  /_\ \ _/ / _\ \  ')
+        print('/_/ |_|/_/|_//_/ |_|/____//_//___//___//___/  ')
+        print('                                              ')
+
+    # Calculation of sqrt(s_NN) and y_beam/y_proj
+    TLAB = inputf['ELAB'] # kinetic lab energy
+    ELAB = TLAB + DMN # lab energy
+    SRT=np.sqrt(2.*DMN*(TLAB+2.*DMN)) # collisional energy in the CM
+    gamma=SRT/2./DMN # gamma factor of the nuclei
+
+    Pproj = np.sqrt((SRT/2.)**2-DMN**2) # nucleon momentum in the CM
+    yproj=0.5*np.log((SRT/2.+Pproj)/(SRT/2.-Pproj)) # rapidity
+
+    R1 = 1.124*inputf['MASSTA']**(1./3) # radius of target
+    R2 = 1.124*inputf['MASSPR']**(1./3) # radius of projectile
+
+    # update dictionnary
+    inputf.update({'SRT': SRT, 'y': yproj, 'gamma': gamma, 'R1': R1, 'R2':R2})
+
+    # create string for output files
+    inputf.update({'collstring': f'{N1}{N2}{int(SRT)}GeV_'})
+
+    # display information about the collision
+    print(f'{N1}+{N2} at $\sqrt{{s_{{NN}}}}$ = {SRT:4.1f} GeV -- TLAB = {TLAB} GeV -- yproj = {yproj}')
+    print(f'BMIN = {xBMIN} fm -- BMAX = {xBMAX} fm -- DELTAB = {inputf["DBIMP"]} fm')
+    print(f'NUM = {inputf["NUM"]} \n')
+
+    return inputf
+
+########################################################################
+def read_data(path_files,inputf):
+    """
+    read all the phsd.dat files specified in path_files
+    """
+
+    list_b_all = np.arange(start=inputf["BMIN"],stop=inputf["BMAX"]+0.0001,step=inputf['DBIMP'])
+
+    # create a list containing name of particles of interest
+    name_part = []
+    for part in list_part.values():
+        name = part[0]
+        if(name!='Sigma0' and name!='Sigmabar0'): # count Lambda0 and Sigma0 together
+            name_part.append(name)
+    name_part += ['ch'] # add an item for charged particles
+
+    # create dictionnary containing information about all particles of interests
+    # To get the list containing the rapidity values (y) of a particle for a value of impact parameter:
+    # dict_bimp[<'y', 'pT', or 'mT'>(b=<impact parameter>;<particle name>)]
+    # Ex: dict_bimp['y(b=2;Omega-)']
+    dict_bimp = {}
+    dict_events = {}
+    # loop over all phsd.dat files
+    for xfile in path_files:
+        print(f'Reading {xfile}')
+        with open (xfile,"r") as data_file:
+
+            # loop inside files over impact parameter
+            for xb in list_b_all:
+                # skip reading files if B > xBMAX
+                if(xb>xBMAX):
+                    break
+                # loop inside impact parameters over NUM
+                for _ in range(int(inputf["NUM"])):   
+
+                    # header format (first line)
+                    header1=data_file.readline()
+                    list_header1=header1.split()
+                    # N, ISUB, IRUN, BIMP, IBweight
+                    N_particles=int(list_header1[0])
+                    current_ISUB=int(list_header1[1])
+                    current_NUM=int(list_header1[2])
+                    current_b=float(list_header1[3])
+
+                    # create new entry for each b in dict if it doesn't already exist
+                    try:
+                        dict_events[f'Nevents(b={current_b})']
+                    except:
+                        dict_events.update({f'Nevents(b={current_b})': 0})
+
+                    # header format (2nd line)
+                    header2=data_file.readline()
+                    list_header2=header2.split()
+                    # Np, phi2, epsi2, phi3, epsi3, phi4, epsi4, phi5, epsi5
+                    Np = float(list_header2[0]) # number of participants
+
+                    if(current_NUM==1 ):
+                        if(current_b<xBMIN):
+                            print(f'   - ISUB = {current_ISUB} ; B = {current_b} fm ; (not counted)')
+                        else:
+                            print(f'   - ISUB = {current_ISUB} ; B = {current_b} fm')
+                    
+                    # only count inelastic events
+                    if(N_particles>(inputf["MASSTA"]+inputf["MASSPR"])):
+                        # count number of events per impact parameter
+                        dict_events[f'Nevents(b={current_b})'] += 1
+
+                        # event ID number
+                        Nev = dict_events[f'Nevents(b={current_b})']-1
+                        # save Npart for each event
+                        dict_events.update({f'Npart(b={current_b};Nev={Nev})': Np})
+
+                        # update dict containing particle info for each event
+                        for part in name_part:
+                            dict_bimp.update({f'y(b={current_b};Nev={Nev};{part})': [],\
+                                f'eta(b={current_b};Nev={Nev};{part})': [],\
+                                f'pT(b={current_b};Nev={Nev};{part})':[],\
+                                f'mT(b={current_b};Nev={Nev};{part})': [],\
+                                f'phi(b={current_b};Nev={Nev};{part})': []})
+
+                    for _ in range(N_particles):
+                        # read line
+                        line = data_file.readline()
+                        # only count inelastic events, read and skip
+                        if(N_particles<=(inputf["MASSTA"]+inputf["MASSPR"])):
+                            continue
+                        # if B < BMIN, don't fill arrays
+                        if(current_b<xBMIN):
+                            continue
+                        # line format is ID,IDQ,PX,PY,PZ,P0,iHist
+                        list_line = line.split()
+                        ID = int(list_line[0])
+                        IDQ = int(list_line[1])
+                        PX = float(list_line[2])
+                        PY = float(list_line[3])
+                        PZ = float(list_line[4])
+                        P0 = float(list_line[5])
+                        iHist = int(list_line[6])
+
+                        y = 0.5*np.log((P0+PZ)/(P0-PZ)) # rapidity
+                        PP = np.sqrt(PX**2.+PY**2.+PZ**2.) # momentum
+                        eta = 0.5*np.log((PP+PZ)/(PP-PZ)) # pseudo-rapidity
+                        pT = np.sqrt(PX**2.+PY**2.) # transverse momentum
+                        phi = np.arctan2(PY,PX) # angle
+                        
+                        # add info into list about charged particles
+                        if(IDQ!=0):
+                            dict_bimp[f'y(b={current_b};Nev={Nev};ch)'].append(y)
+                            dict_bimp[f'pT(b={current_b};Nev={Nev};ch)'].append(pT)
+                            dict_bimp[f'eta(b={current_b};Nev={Nev};ch)'].append(eta)
+                            dict_bimp[f'phi(b={current_b};Nev={Nev};ch)'].append(phi)
+
+                        # if ID is not the list, then skip this particle 
+                        # and continue with the loop
+                        try:
+                            name,mass,_ = list_part[ID]
+                        except:
+                            continue
+
+                        # don't count spectator neutrons and protons
+                        if(name=='p' or name=='n0'):
+                            # if |y| > yproj-0.5, don't count
+                            # 0.5 is arbitrary, but works fine
+                            if((iHist==-1) and (abs(y)>(inputf['y']-0.5))):
+                                continue
+
+                        # count Lambda0 and Sigma0 together
+                        if(name=='Sigma0'):
+                            name = 'Lambda0'
+                        if(name=='Sigmabar0'):
+                            name = 'Lambdabar0'
+
+                        mT = np.sqrt(mass**2.+PX**2.+PY**2.) # transverse mass
+
+                        # add particle info into list
+                        dict_bimp[f'y(b={current_b};Nev={Nev};{name})'].append(y)
+                        dict_bimp[f'pT(b={current_b};Nev={Nev};{name})'].append(pT)
+                        dict_bimp[f'mT(b={current_b};Nev={Nev};{name})'].append(mT)
+                        dict_bimp[f'eta(b={current_b};Nev={Nev};{name})'].append(eta)
+                        dict_bimp[f'phi(b={current_b};Nev={Nev};{name})'].append(phi)
+
+    # transform each list to numpy array for analysis
+    for key in dict_bimp:
+        dict_bimp[key] = np.array(dict_bimp[key])
+
+    return dict_events,dict_bimp
+
+########################################################################
+def calculate_quant(dict_events,dict_bimp,inputf,particles):
+
+    print('\nCalculating outputs')
+
+    # format for output files
+    out_str = inputf['collstring']
+
+    # list of impact parameters
+    # which b to select for output?
+    list_b_all = np.arange(start=inputf["BMIN"],stop=inputf["BMAX"]+0.0001,step=inputf['DBIMP'])
+    list_b = list_b_all[(xBMIN <= list_b_all) & (list_b_all <= xBMAX)]
+
+    # nuclei information
+    N1 = nuclei[inputf["MASSTA"]]
+    N2 = nuclei[inputf["MASSPR"]]
+    plot_title = f"{N1}+{N2} at $\sqrt{{s_{{NN}}}}$ = {inputf['SRT']:4.1f} GeV"
+
+    part_desc = []
+    for part in particles:
+        part_desc += [part,'err']
+
+    ####################################################################
+    def return_mean(gen,squared=False):
+        """
+        return mean and standard mean error from generator containing
+        quantity for each event
+        """
+        xlist = list(gen)
+        mean = np.mean(xlist,axis=0)
+        sem = stats.sem(xlist)
+        # if mean is a float, just return floats
+        if(isinstance(mean, float)):
+            return mean,sem
+        # if it's an array, return zipped array of mean and sem or sem**2.
+        else:
+            if(squared):
+                return np.array(list(zip(mean,sem**2.)))
+            else:
+                return np.array(list(zip(mean,sem)))
+
+    ####################################################################
+    # quantities as a function of Npart
+    def quant_Npart():
+        """
+        Export observables as a function of Npart
+        dN_ch/deta & dN_ch/dy for charged particles
+        dN/dy & <pT> for each particles
+        """
+        print("   - observables as a function of Npart")
+        
+        # calculate number of participants + error
+        Nparts = np.zeros((len(list_b),2))
+        for ib,xb in enumerate(list_b):
+            Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
+            gen_Npart = np.array([dict_events[f'Npart(b={xb};Nev={Nev})'] for Nev in range(Nevtot)])
+            Nparts[ib] = return_mean(gen_Npart)
+
+        # select particles in abs(y) < midrapy or abs(eta) < midrapeta
+        deta = 2.*midrapeta
+        dy = 2.*midrapy
+
+        # dN_ch/deta & dN_ch/dy + error
+        dNchdeta = np.zeros((len(list_b),2))
+        dNchdy = np.zeros((len(list_b),2))
+        for ib,xb in enumerate(list_b):
+            Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
+
+            # construct generator containing dNdchdeta at midrapidity for each event
+            gen_dNchdeta = (len(dict_bimp[f'eta(b={xb};Nev={Nev};ch)'][abs(dict_bimp[f'eta(b={xb};Nev={Nev};ch)']) < midrapeta])/deta for Nev in range(Nevtot))
+            # calculate average over all events
+            dNchdeta[ib] = return_mean(gen_dNchdeta)
+
+            # construct generator containing dNdchdy at midrapidity for each event
+            gen_dNchdy = (len(dict_bimp[f'y(b={xb};Nev={Nev};ch)'][abs(dict_bimp[f'y(b={xb};Nev={Nev};ch)']) < midrapy])/dy for Nev in range(Nevtot))
+            # calculate average over all events
+            dNchdy[ib] = return_mean(gen_dNchdy)
+
+        dict_out = pd.DataFrame(np.concatenate((Nparts,dNchdeta),axis=1), columns=['Npart','err','dNchdeta','err'])
+        dict_out.to_csv(path+out_str+'dNchdeta_Npart.csv', index=False, header=True)
+
+        dict_out = pd.DataFrame(np.concatenate((Nparts,dNchdy),axis=1), columns=['Npart','err','dNchdy','err'])
+        dict_out.to_csv(path+out_str+'dNchdy_Npart.csv', index=False, header=True)
+
+        if(len(Nparts)>1):
+            plot_quant(Nparts,dNchdeta,r'$N_{part}$',f'$dN_{{ch}}/d\eta|_{{|\eta|<{midrapeta}}}$',plot_title,path+out_str+'dNchdeta_Npart')
+            plot_quant(Nparts,dNchdy,r'$N_{part}$',f'$dN_{{ch}}/dy|_{{|y|<{midrapy}}}$',plot_title,path+out_str+'dNchdy_Npart')
+
+        # dN/dy & <pT>
+        dNdy = np.zeros((len(list_b),len(particles),2))
+        mean_pT = np.zeros((len(list_b),len(particles),2))
+        for ib,xb in enumerate(list_b):
+            Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
+            for ip,part in enumerate(particles):
+                # construct generator containing dNdy at midrapidity for all events for the designated particle
+                gen_dNdy = (len(dict_bimp[f'y(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy])/dy for Nev in range(Nevtot))
+                # calculate average over all events
+                dNdy[ib,ip] = return_mean(gen_dNdy)
+                # construc generator containing <pT> at midrapidity for all events for the designated particle
+                gen_mean_pT = (np.mean(dict_bimp[f'pT(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy])/dy for Nev in range(Nevtot))
+                # calculate average over all events
+                mean_pT[ib,ip] = return_mean(gen_mean_pT)
+
+        dict_out = pd.DataFrame(np.concatenate((Nparts,dNdy.reshape((len(list_b),len(particles)*2))),axis=1), columns=['Npart','err']+part_desc)
+        dict_out.to_csv(path+out_str+'dNdy_Npart.csv', index=False, header=True)
+
+        dict_out = pd.DataFrame(np.concatenate((Nparts,mean_pT.reshape((len(list_b),len(particles)*2))),axis=1), columns=['Npart','err']+part_desc)
+        dict_out.to_csv(path+out_str+'pT_Npart.csv', index=False, header=True)
+
+        if(len(Nparts)>1):
+            plot_quant(Nparts,dNdy,r'$N_{part}$',r'$dN/dy$',plot_title,path+out_str+'dNdy_Npart',partplot=particles,log=True)
+            plot_quant(Nparts,mean_pT,r'$N_{part}$',r'$\langle p_T \rangle$ [GeV]',plot_title,path+out_str+'pT_Npart',partplot=particles)
+
+    ####################################################################
+    # quantities as a function of y and eta
+    def quant_y():
+        """
+        Export observables as a function of rapidities y and eta
+        dN/dy & dN/deta for charged particles
+        dN/dy & dN/deta for each particles
+        """
+        print("   - observables as a function of y & eta")
+
+        # select particles in abs(y) < ylim or abs(eta) < etalim
+        etalim = int(round(inputf['y'])+1)
+        ylim = int(round(inputf['y'])+1)
+        # list of y and eta for each bin
+        list_eta = np.arange(start=-etalim,stop=etalim+0.0001,step=etabin)
+        list_y = np.arange(start=-ylim,stop=ylim+0.0001,step=ybin)
+
+        # dN_ch/deta & dN_ch/dy
+        dNchdeta = np.zeros((len(list_eta),2))
+        dNchdy = np.zeros((len(list_y),2))
+        # normalization for sum over b
+        Anormb = sum([2.*pi*xb*inputf['DBIMP'] for xb in list_b])
+        # for each b, add the contribution to spectrum
+        for xb in list_b:
+            weightb = 2.*pi*xb*inputf['DBIMP']/Anormb # weight for this b
+            Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
+
+            # construct list containing the histograms of dNch/deta(eta) for each event
+            gen_dNchdeta = (weightb/etabin*np.histogram(dict_bimp[f'eta(b={xb};Nev={Nev};ch)'],bins=len(list_eta),range=(-etalim-etabin/2.,etalim+etabin/2.))[0] for Nev in range(Nevtot))
+            # construct list containing the histograms of dNch/dy(y) for each event
+            gen_dNchdy = (weightb/ybin*np.histogram(dict_bimp[f'y(b={xb};Nev={Nev};ch)'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for Nev in range(Nevtot))
+
+            # calculate average over all events
+            dNchdeta += return_mean(gen_dNchdeta,squared=True)
+            dNchdy += return_mean(gen_dNchdy,squared=True)
+
+        # calculate standard mean error as \sigma = sqrt( \sum_i \sigma(b_i)**2.)
+        dNchdeta[:,1] = np.sqrt(dNchdeta[:,1]) 
+        dNchdy[:,1] = np.sqrt(dNchdy[:,1]) 
+
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_eta).T,dNchdeta),axis=1), columns=['eta','dNchdeta','err'])
+        dict_out.to_csv(path+out_str+'dNchdeta_eta.csv', index=False, header=True)
+
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_y).T,dNchdy),axis=1), columns=['y','dNchdy','err'])
+        dict_out.to_csv(path+out_str+'dNchdy_y.csv', index=False, header=True)
+
+        plot_quant(list_eta,dNchdeta,r'$\eta$',f'$dN_{{ch}}/d\eta$',plot_title,path+out_str+'dNchdeta_eta')
+        plot_quant(list_y,dNchdy,r'$y$',f'$dN_{{ch}}/dy$',plot_title,path+out_str+'dNchdy_y')
+
+        # dN/dy & dN/deta
+        dNdeta = np.zeros((len(list_eta),len(particles),2))
+        dNdy = np.zeros((len(list_y),len(particles),2))
+        # normalization for sum over b
+        Anormb = sum([2.*pi*xb*inputf['DBIMP'] for xb in list_b])
+        for xb in list_b:
+            weightb = 2.*pi*xb*inputf['DBIMP']/Anormb # weight for this b
+            Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
+            for ip,part in enumerate(particles):
+                # construct list containing the histograms of dN/deta(eta) for each event for the designated particle
+                gen_dNdeta = np.array([weightb/etabin*np.histogram(dict_bimp[f'eta(b={xb};Nev={Nev};{part})'],bins=len(list_eta),range=(-etalim-etabin/2.,etalim+etabin/2.))[0] for Nev in range(Nevtot)])
+                # construct list containing the histograms of dN/dy(y) for each event for the designated particle
+                gen_dNdy = np.array([weightb/ybin*np.histogram(dict_bimp[f'y(b={xb};Nev={Nev};{part})'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for Nev in range(Nevtot)])
+                
+                # calculate average over all events
+                dNdeta[:,ip] += return_mean(gen_dNdeta,squared=True)
+                dNdy[:,ip] += return_mean(gen_dNdy,squared=True)
+
+        # calculate standard mean error as \sigma = sqrt( \sum_i \sigma(b_i)**2.)
+        dNdeta[:,:,1] = np.sqrt(dNdeta[:,:,1]) 
+        dNdy[:,:,1] = np.sqrt(dNdy[:,:,1])
+
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_eta).T,dNdeta.reshape((len(list_eta),len(particles)*2))),axis=1), columns=['eta']+part_desc)
+        dict_out.to_csv(path+out_str+'dNdeta_eta.csv', index=False, header=True)
+
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_y).T,dNdy.reshape((len(list_y),len(particles)*2))),axis=1), columns=['y']+part_desc)
+        dict_out.to_csv(path+out_str+'dNdy_y.csv', index=False, header=True)
+
+        plot_quant(list_eta,dNdeta,r'$\eta$',f'$dN/d\eta$',plot_title,path+out_str+'dNdeta_eta',partplot=particles,log=True)
+        plot_quant(list_y,dNdy,r'$y$',f'$dN/dy$',plot_title,path+out_str+'dNdy_y',partplot=particles,log=True)
+
+    ####################################################################
+    # stopping as a function of y
+    def stopping_y():
+        """
+        Export observables as a function of rapidities y 
+        dN/dy of net baryons
+        stopping power
+        """
+        print("   - dNdy of net baryons as a function of y")
+
+        list_B = ['p','n0','Lambda0','Sigma-','Sigma+','Xi0','Xi-','Omega-']
+        list_antiB = ['pbar','nbar0','Lambdabar0','Sigmabar+','Sigmabar-','Xibar0','Xibar+','Omegabar+']
+
+        # select particles in abs(y) < ylim
+        ylim = int(round(inputf['y'])+1)
+        # list of y and eta for each bin
+        list_y = np.arange(start=-ylim,stop=ylim+0.0001,step=ybin)
+
+        # calculate number of participants + error
+        Nparts = np.zeros((len(list_b),2))
+        for ib,xb in enumerate(list_b):
+            Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
+            gen_Npart = np.array([dict_events[f'Npart(b={xb};Nev={Nev})'] for Nev in range(Nevtot)])
+            Nparts[ib] = return_mean(gen_Npart)
+
+        # initialize stopping
+        delta_y = np.array([inputf['y'],0])
+        # dN/dy
+        dNdy = np.zeros((len(list_y),2))
+        # normalization for sum over b
+        Anormb = sum([2.*pi*xb*inputf['DBIMP'] for xb in list_b])
+        for xb in list_b:
+            # initialize dNdy for each b
+            dNdyb = np.zeros((len(list_y),2))
+            weightb = 2.*pi*xb*inputf['DBIMP']/Anormb # weight for this b
+            Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
+
+            # for each event, sum histogram for dN/dy(y) over baryons/antibaryons
+            gen_dNdyb = (np.sum(np.array([weightb/ybin*np.histogram(dict_bimp[f'y(b={xb};Nev={Nev};{part})'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for part in list_B])-np.array([weightb/ybin*np.histogram(dict_bimp[f'y(b={xb};Nev={Nev};{part})'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for part in list_antiB]),axis=0) for Nev in range(Nevtot))
+            # calculate average over all events of dN/dy(y) baryons minus antibaryons
+            dNdyb = return_mean(gen_dNdyb,squared=True)
+
+            # add dNdy for each b
+            dNdy +=  dNdyb
+
+            dNdyb[:,1] = np.sqrt(dNdyb[:,1]) 
+            # stopping (add contribution from this impact parameter)
+            delta_y[0] -= sum([dNdyb[iy,0]/Nparts[ib,0]*abs(y)*ybin for iy,y in enumerate(list_y) if ((y<=inputf['y']) and (dNdyb[iy,0]>0))])
+            # standard mean error on stopping
+            # error in Npart and dNdyb should be taken into account as
+            # \sigma**2(dNdyb/Npart) = (dNdyb/Npart)**2*((\sigma(dNdyb)/dNdyb)**2 + (\sigma(Npart)/Npart)**2) 
+            delta_y[1] = sum([(dNdyb[iy,0]/Nparts[ib,0])**2.*((dNdyb[iy,1]/dNdyb[iy,0])**2. + (Nparts[ib,1]/Nparts[ib,0])**2.)*abs(y)*ybin for iy,y in enumerate(list_y) if ((y<=inputf['y']) and (dNdyb[iy,0]>0))])
+
+        # calculate standard mean error as \sigma = sqrt( \sum_i \sigma(b_i)**2.)
+        dNdy[:,1] = np.sqrt(dNdy[:,1])
+        delta_y[1] = np.sqrt(delta_y[1])
+
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_y).T,dNdy),axis=1), columns=['y','dNdy','err'])
+        dict_out.to_csv(path+out_str+'dNdyBBAR_y.csv', index=False, header=True)
+
+        dict_out = pd.DataFrame(np.array([[inputf['SRT'],inputf['y'],delta_y[0],delta_y[1],delta_y[0]/inputf['y'],delta_y[1]/inputf['y']]]), columns=['sqrt(s)','y','delta_y','err','delta_y/y','err'])
+        dict_out.to_csv(path+out_str+'stopping.csv', index=False, header=True)
+
+        plot_quant(list_y,dNdy,r'$y$',r'$dN_{B-\bar{B}}/dy$',plot_title,path+out_str+'dNdyBBAR_y')
+
+    ####################################################################
+    # quantities as a function of pT and mT
+    def quant_pT():
+        """
+        Export observables as a function of pT & mT
+        dN/dpT & dN/dmT for charged particles
+        dN/dpT & dN/dmT for each particles
+        """
+        print("   - observables as a function of pT & mT")
+
+        # gap at midrapidity
+        dy = 2.*midrapy
+        # max values of pT, mT
+        pTmax = 4.
+        mTmax = 4.
+        # list of y and eta for each bin
+        list_mT = np.arange(start=pTbin/2.,stop=pTmax-pTbin/2.+0.0001,step=pTbin)
+        list_pT = np.arange(start=mTbin/2.,stop=mTmax-mTbin/2.+0.0001,step=mTbin)
+
+        # dN_ch/dpT & dN_ch/dmT
+        dNchdpT = np.zeros((len(list_pT),2))
+        # normalization for sum over b
+        Anormb = sum([2.*pi*xb*inputf['DBIMP'] for xb in list_b])
+        # for each b, add the contribution to spectrum
+        for xb in list_b:
+            weightb = 2.*pi*xb*inputf['DBIMP']/Anormb # weight for this b
+            Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
+            # construct array containg the histograms dNch/dpT for each event
+            gen_dNchdpT = (weightb*np.histogram(dict_bimp[f'pT(b={xb};Nev={Nev};ch)'][abs(dict_bimp[f'y(b={xb};Nev={Nev};ch)']) < midrapy],bins=len(list_pT),range=(0,pTmax),weights=np.array([1./(2.*pi*pT*pTbin*dy) for pT in dict_bimp[f'pT(b={xb};Nev={Nev};ch)'][abs(dict_bimp[f'y(b={xb};Nev={Nev};ch)']) < midrapy]]))[0] for Nev in range(Nevtot))
+            # calculate average over all events
+            dNchdpT += return_mean(gen_dNchdpT,squared=True)
+
+        # calculate standard mean error as \sigma = sqrt( \sum_i \sigma(b_i)**2.)
+        dNchdpT[:,1] = np.sqrt(dNchdpT[:,1])
+
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_pT).T,dNchdpT),axis=1), columns=['pT','dNchdpT','err'])
+        dict_out.to_csv(path+out_str+'dNchdpT_pT.csv', index=False, header=True)
+
+        plot_quant(list_pT,dNchdpT,r'$p_T$ [GeV]',f'$Ed^3N_{{ch}}/d^3p|_{{|y|<{midrapy}}}\ [GeV^{{-2}}]$',plot_title,path+out_str+'dNchdpT_pT',log=True)
+
+        # dN/dpT & dN/dmT
+        dNdpT = np.zeros((len(list_pT),len(particles),2))
+        dNdmT = np.zeros((len(list_mT),len(particles),2))
+        # normalization for sum over b
+        Anormb = sum([2.*pi*xb*inputf['DBIMP'] for xb in list_b])
+        for xb in list_b:
+            weightb = 2.*pi*xb*inputf['DBIMP']/Anormb # weight for this b
+            for ip,part in enumerate(particles):
+                weightb = 2.*pi*xb*inputf['DBIMP']/Anormb # weight for this b
+                gen_dNdpT = (weightb*np.histogram(dict_bimp[f'pT(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy],bins=len(list_pT),range=(0,pTmax),weights=np.array([1./(2.*pi*pT*pTbin*dy) for pT in dict_bimp[f'pT(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy]]))[0] for Nev in range(Nevtot))
+                gen_dNdmT = (weightb*np.histogram(dict_bimp[f'mT(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy]-from_part(part)[1],bins=len(list_mT),range=(0,mTmax),weights=np.array([1./(2.*pi*mT*mTbin*dy) for mT in dict_bimp[f'mT(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy]]))[0] for Nev in range(Nevtot))
+
+                # calculate average over all events
+                dNdpT[:,ip] += return_mean(gen_dNdpT,squared=True)
+                dNdmT[:,ip] += return_mean(gen_dNdmT,squared=True)
+
+        # calculate standard mean error as \sigma = sqrt( \sum_i \sigma(b_i)**2.)
+        dNdpT[:,:,1] = np.sqrt(dNdpT[:,:,1])
+        dNdmT[:,:,1] = np.sqrt(dNdmT[:,:,1])
+
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_pT).T,dNdpT.reshape((len(list_pT),len(particles)*2))),axis=1), columns=['pT']+part_desc)
+        dict_out.to_csv(path+out_str+'dNdpT_pT.csv', index=False, header=True)
+
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_mT).T,dNdmT.reshape((len(list_mT),len(particles)*2))),axis=1), columns=['mT']+part_desc)
+        dict_out.to_csv(path+out_str+'dNdmT_mT.csv', index=False, header=True)
+
+        plot_quant(list_pT,dNdpT,r'$p_T$ [GeV]',f'$Ed^3N/d^3p|_{{|y|<{midrapy}}}\ [GeV^{{-2}}]$',plot_title,path+out_str+'dNdpT_pT',partplot=particles,log=True)
+        plot_quant(list_mT,dNdmT,r'$m_T-m_0$ [GeV]',f'$Ed^3N/d^3p|_{{|y|<{midrapy}}}\ [GeV^{{-2}}]$',plot_title,path+out_str+'dNdpT_mT',partplot=particles,log=True)
+
+    quant_Npart()
+    quant_y()
+    stopping_y()
+    quant_pT()
+    
+########################################################################
+def main():
+    # list of particles to ouput
+    particles = ['pi+','pi-','K+','K-','p','pbar','Lambda0','Lambdabar0','Xi-','Xibar+','Omega-','Omegabar+']
+
+    path_input, path_files = detect_files()
+    inputf = read_input(path_input)
+    dict_events,dict_bimp = read_data(path_files,inputf)
+    calculate_quant(dict_events,dict_bimp,inputf,particles)
+
+main()

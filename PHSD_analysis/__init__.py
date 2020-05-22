@@ -2,10 +2,11 @@
 To analyze and plot heavy-ion collision data produced by the Parton-Hadron-String Dynamics (PHSD) model.
 """
 
-__version__ = '0.0.0'
+__version__ = '1.0.0'
 
 from matplotlib.pyplot import rc
 import matplotlib.pyplot as pl
+import numpy as np
 
 ########################################################################
 def str2bool(val):
@@ -74,6 +75,14 @@ rc('figure', titlesize=BIGGER_SIZE, titleweight='bold')  # fontsize of the figur
 rc('savefig', dpi=300, bbox='tight')
 
 ########################################################################
+def from_part(namepart):
+    # find label in dict list_part
+    for xpart,mass,label in list_part.values():
+      if(xpart==namepart):
+        break
+    return xpart,mass,label
+
+########################################################################
 def plot_quant(data_x,data_y,xlabel,ylabel,title,outname,partplot=None,log=False):
     """
     Plot quantities and export
@@ -81,24 +90,47 @@ def plot_quant(data_x,data_y,xlabel,ylabel,title,outname,partplot=None,log=False
     # inititialize plot
     f,ax = pl.subplots(figsize=(10,7))
 
+    # check if data_x contain values + errors
+    # only keep values
+    try:
+      data_x.shape[1]
+      data_x = data_x[:,0]
+    except:
+      pass
+
     if(partplot==None):
-      # plot the isentropic trajectories
-      ax.plot(data_x, data_y, color='black', linewidth='2.5')
+      nonzero = data_y[:,0] != 0.
+      data_x = data_x[nonzero]
+      data_y = data_y[nonzero]
+      ax.plot(data_x, data_y[:,0], color='black', linewidth='2.5')
+      ax.fill_between(data_x, data_y[:,0]-data_y[:,1], data_y[:,0]+data_y[:,1], alpha=0.5, color='black')
+
+      if(log):
+        ymin = np.amin(data_y[:,0][data_y[:,0] != 0])
+        ax.set_ylim(ymin)
+        ax.set_yscale("log")
+
     else:
       for ip,part in enumerate(partplot):
+        nonzero = data_y[:,ip,0] != 0.
+        data_x = data_x[nonzero]
+        data_y = data_y[nonzero]
+
         # find label in dict list_part
-        for xpart,_,label in list_part.values():
-          if(xpart==part):
-            break
+        _,_,label = from_part(part)
+        
         if(part=='Lambda0'):
           label += '+'+list_part[3212][2]
         if(part=='Lambdabar0'):
           label += '+'+list_part[-3212][2]
-        # plot the isentropic trajectories
-        ax.plot(data_x, data_y[ip], linewidth='2.5', label=label)
+        line = ax.plot(data_x, data_y[:,ip,0], linewidth='2.5', label=label)
+        ax.fill_between(data_x, data_y[:,ip,0]-data_y[:,ip,1], data_y[:,ip,0]+data_y[:,ip,1], alpha=0.5, color=line[0].get_color())
         ax.legend(title_fontsize=SMALL_SIZE, loc='best', borderaxespad=0., frameon=False)
 
-    if(log):
-        ax.set_yscale("log")
+        if(log):
+          ymin = np.amin(data_y[:,:,0][data_y[:,:,0] != 0])
+          ax.set_ylim(ymin)
+          ax.set_yscale("log")
+
     ax.set(xlabel=xlabel, ylabel=ylabel, title=title)
     f.savefig(f"{outname}.png")
