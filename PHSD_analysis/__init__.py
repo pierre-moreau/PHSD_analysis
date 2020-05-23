@@ -2,7 +2,7 @@
 To analyze and plot heavy-ion collision data produced by the Parton-Hadron-String Dynamics (PHSD) model.
 """
 
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 
 from matplotlib.pyplot import rc
 import matplotlib.pyplot as pl
@@ -79,58 +79,78 @@ def from_part(namepart):
     # find label in dict list_part
     for xpart,mass,label in list_part.values():
       if(xpart==namepart):
-        break
-    return xpart,mass,label
+        return xpart,mass,label
+    raise Exception(f'particle {namepart} not found in list_part')
 
 ########################################################################
-def plot_quant(data_x,data_y,xlabel,ylabel,title,outname,partplot=None,log=False):
-    """
-    Plot quantities and export
-    """
-    # inititialize plot
-    f,ax = pl.subplots(figsize=(10,7))
+def plot_quant(df,xlabel,ylabel,title,outname,log=False):
+  """
+  Plot quantities and export
+  """
+  # inititialize plot
+  f,ax = pl.subplots(figsize=(10,7))
 
-    # check if data_x contain values + errors
-    # only keep values
+  # label of all columns in the dataframe
+  columns = [col for col in df]
+
+  # check if there is a x_err column
+  if(columns[1]==(columns[0]+'_err')):
+    xerr = True
+  else:
+    xerr = False
+
+  # columns in y-axis
+  if(xerr):
+    columns_y = columns[2:]
+  else:
+    columns_y = columns[1:]
+    
+  # initialize limit on y-axis for plot
+  ymin = 1000.
+  ymax = -1000.
+
+  # iterate over columns_y
+  for col in columns_y[::2]:
+    # select data where it's nonzero
+    nonzero = df[col] != 0.
+    data_x = df[columns[0]][nonzero]
+    data_y = df[col][nonzero]
+    data_y_err = df[col+'_err'][nonzero]
+    ymin_col = np.amin(data_y)
+    if(ymin_col<ymin):
+      ymin = ymin_col
+    ymax_col = np.amax(data_y+data_y_err)
+    if(ymax_col>ymax):
+      ymax = ymax_col
+
+    # try to find label in particles
     try:
-      data_x.shape[1]
-      data_x = data_x[:,0]
+      _,_,label = from_part(col)
+    # if not found, use column name
     except:
-      pass
+      label = r'$'+col+'$'
 
-    if(partplot==None):
-      nonzero = data_y[:,0] != 0.
-      data_x = data_x[nonzero]
-      data_y = data_y[nonzero]
-      ax.plot(data_x, data_y[:,0], color='black', linewidth='2.5')
-      ax.fill_between(data_x, data_y[:,0]-data_y[:,1], data_y[:,0]+data_y[:,1], alpha=0.5, color='black')
+    if(col=='Lambda0'):
+      label += '+'+list_part[3212][2]
+    if(col=='Lambdabar0'):
+      label += '+'+list_part[-3212][2]
 
-      if(log):
-        ymin = np.amin(data_y[:,0][data_y[:,0] != 0])
-        ax.set_ylim(ymin)
-        ax.set_yscale("log")
+    # check number of columns
+    # if just one column (y & y_err) to plot, no label
+    if(len(columns_y)==2):
+      label = None
 
+    line = ax.plot(data_x, data_y, linewidth='2.5', label=label)
+    ax.fill_between(data_x, data_y-data_y_err, data_y+data_y_err, alpha=0.5, color=line[0].get_color())
+    if(label!=None):
+      ax.legend(title_fontsize=SMALL_SIZE, loc='best', borderaxespad=0., frameon=False)
+
+    if(log):
+      ax.set_yscale("log")
     else:
-      for ip,part in enumerate(partplot):
-        nonzero = data_y[:,ip,0] != 0.
-        data_x = data_x[nonzero]
-        data_y = data_y[nonzero]
+      ymin = 0.
 
-        # find label in dict list_part
-        _,_,label = from_part(part)
-        
-        if(part=='Lambda0'):
-          label += '+'+list_part[3212][2]
-        if(part=='Lambdabar0'):
-          label += '+'+list_part[-3212][2]
-        line = ax.plot(data_x, data_y[:,ip,0], linewidth='2.5', label=label)
-        ax.fill_between(data_x, data_y[:,ip,0]-data_y[:,ip,1], data_y[:,ip,0]+data_y[:,ip,1], alpha=0.5, color=line[0].get_color())
-        ax.legend(title_fontsize=SMALL_SIZE, loc='best', borderaxespad=0., frameon=False)
+  ax.set(ylim=[ymin,ymax])
 
-        if(log):
-          ymin = np.amin(data_y[:,:,0][data_y[:,:,0] != 0])
-          ax.set_ylim(ymin)
-          ax.set_yscale("log")
-
-    ax.set(xlabel=xlabel, ylabel=ylabel, title=title)
-    f.savefig(f"{outname}.png")
+  ax.set(xlabel=xlabel, ylabel=ylabel, title=title)
+  f.savefig(f"{outname}.png")

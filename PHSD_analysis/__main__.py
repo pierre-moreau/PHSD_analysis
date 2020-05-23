@@ -284,7 +284,7 @@ def read_data(path_files,inputf):
                         PP = np.sqrt(PX**2.+PY**2.+PZ**2.) # momentum
                         eta = 0.5*np.log((PP+PZ)/(PP-PZ)) # pseudo-rapidity
                         pT = np.sqrt(PX**2.+PY**2.) # transverse momentum
-                        phi = np.arctan2(PY,PX) # angle
+                        phi = np.arctan2(PY,PX) # angle phi
                         
                         # add info into list about charged particles
                         if(IDQ!=0):
@@ -346,9 +346,10 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
     N2 = nuclei[inputf["MASSPR"]]
     plot_title = f"{N1}+{N2} at $\sqrt{{s_{{NN}}}}$ = {inputf['SRT']:4.1f} GeV"
 
-    part_desc = []
+    # label for particles
+    label_part = []
     for part in particles:
-        part_desc += [part,'err']
+        label_part += [part,part+'_err']
 
     ####################################################################
     def return_mean(gen,squared=False):
@@ -406,15 +407,15 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
             # calculate average over all events
             dNchdy[ib] = return_mean(gen_dNchdy)
 
-        dict_out = pd.DataFrame(np.concatenate((Nparts,dNchdeta),axis=1), columns=['Npart','err','dNchdeta','err'])
+        dict_out = pd.DataFrame(np.concatenate((Nparts,dNchdeta),axis=1), columns=['Npart','Npart_err','dNchdeta','dNchdeta_err'])
         dict_out.to_csv(path+out_str+'dNchdeta_Npart.csv', index=False, header=True)
-
-        dict_out = pd.DataFrame(np.concatenate((Nparts,dNchdy),axis=1), columns=['Npart','err','dNchdy','err'])
-        dict_out.to_csv(path+out_str+'dNchdy_Npart.csv', index=False, header=True)
-
         if(len(Nparts)>1):
-            plot_quant(Nparts,dNchdeta,r'$N_{part}$',f'$dN_{{ch}}/d\eta|_{{|\eta|<{midrapeta}}}$',plot_title,path+out_str+'dNchdeta_Npart')
-            plot_quant(Nparts,dNchdy,r'$N_{part}$',f'$dN_{{ch}}/dy|_{{|y|<{midrapy}}}$',plot_title,path+out_str+'dNchdy_Npart')
+            plot_quant(dict_out,r'$N_{part}$',f'$dN_{{ch}}/d\eta|_{{|\eta|<{midrapeta}}}$',plot_title,path+out_str+'dNchdeta_Npart')
+
+        dict_out = pd.DataFrame(np.concatenate((Nparts,dNchdy),axis=1), columns=['Npart','Npart_err','dNchdy','dNchdy_err'])
+        dict_out.to_csv(path+out_str+'dNchdy_Npart.csv', index=False, header=True)
+        if(len(Nparts)>1):
+            plot_quant(dict_out,r'$N_{part}$',f'$dN_{{ch}}/dy|_{{|y|<{midrapy}}}$',plot_title,path+out_str+'dNchdy_Npart')
 
         # dN/dy & <pT>
         dNdy = np.zeros((len(list_b),len(particles),2))
@@ -431,15 +432,15 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
                 # calculate average over all events
                 mean_pT[ib,ip] = return_mean(gen_mean_pT)
 
-        dict_out = pd.DataFrame(np.concatenate((Nparts,dNdy.reshape((len(list_b),len(particles)*2))),axis=1), columns=['Npart','err']+part_desc)
+        dict_out = pd.DataFrame(np.concatenate((Nparts,dNdy.reshape((len(list_b),len(particles)*2))),axis=1), columns=['Npart','Npart_err']+label_part)
         dict_out.to_csv(path+out_str+'dNdy_Npart.csv', index=False, header=True)
-
-        dict_out = pd.DataFrame(np.concatenate((Nparts,mean_pT.reshape((len(list_b),len(particles)*2))),axis=1), columns=['Npart','err']+part_desc)
-        dict_out.to_csv(path+out_str+'pT_Npart.csv', index=False, header=True)
-
         if(len(Nparts)>1):
-            plot_quant(Nparts,dNdy,r'$N_{part}$',r'$dN/dy$',plot_title,path+out_str+'dNdy_Npart',partplot=particles,log=True)
-            plot_quant(Nparts,mean_pT,r'$N_{part}$',r'$\langle p_T \rangle$ [GeV]',plot_title,path+out_str+'pT_Npart',partplot=particles)
+            plot_quant(dict_out,r'$N_{part}$',r'$dN/dy$',plot_title,path+out_str+'dNdy_Npart',log=True)
+
+        dict_out = pd.DataFrame(np.concatenate((Nparts,mean_pT.reshape((len(list_b),len(particles)*2))),axis=1), columns=['Npart','Npart_err']+label_part)
+        dict_out.to_csv(path+out_str+'pT_Npart.csv', index=False, header=True)
+        if(len(Nparts)>1):
+            plot_quant(dict_out,r'$N_{part}$',r'$\langle p_T \rangle$ [GeV]',plot_title,path+out_str+'pT_Npart')
 
     ####################################################################
     # quantities as a function of y and eta
@@ -481,14 +482,13 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
         dNchdeta[:,1] = np.sqrt(dNchdeta[:,1]) 
         dNchdy[:,1] = np.sqrt(dNchdy[:,1]) 
 
-        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_eta).T,dNchdeta),axis=1), columns=['eta','dNchdeta','err'])
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_eta).T,dNchdeta),axis=1), columns=['eta','dNchdeta','dNchdeta_err'])
         dict_out.to_csv(path+out_str+'dNchdeta_eta.csv', index=False, header=True)
+        plot_quant(dict_out,r'$\eta$',f'$dN_{{ch}}/d\eta$',plot_title,path+out_str+'dNchdeta_eta')
 
-        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_y).T,dNchdy),axis=1), columns=['y','dNchdy','err'])
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_y).T,dNchdy),axis=1), columns=['y','dNchdy','dNchdy_err'])
         dict_out.to_csv(path+out_str+'dNchdy_y.csv', index=False, header=True)
-
-        plot_quant(list_eta,dNchdeta,r'$\eta$',f'$dN_{{ch}}/d\eta$',plot_title,path+out_str+'dNchdeta_eta')
-        plot_quant(list_y,dNchdy,r'$y$',f'$dN_{{ch}}/dy$',plot_title,path+out_str+'dNchdy_y')
+        plot_quant(dict_out,r'$y$',f'$dN_{{ch}}/dy$',plot_title,path+out_str+'dNchdy_y')
 
         # dN/dy & dN/deta
         dNdeta = np.zeros((len(list_eta),len(particles),2))
@@ -512,14 +512,13 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
         dNdeta[:,:,1] = np.sqrt(dNdeta[:,:,1]) 
         dNdy[:,:,1] = np.sqrt(dNdy[:,:,1])
 
-        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_eta).T,dNdeta.reshape((len(list_eta),len(particles)*2))),axis=1), columns=['eta']+part_desc)
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_eta).T,dNdeta.reshape((len(list_eta),len(particles)*2))),axis=1), columns=['eta']+label_part)
         dict_out.to_csv(path+out_str+'dNdeta_eta.csv', index=False, header=True)
+        plot_quant(dict_out,r'$\eta$',f'$dN/d\eta$',plot_title,path+out_str+'dNdeta_eta',log=True)
 
-        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_y).T,dNdy.reshape((len(list_y),len(particles)*2))),axis=1), columns=['y']+part_desc)
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_y).T,dNdy.reshape((len(list_y),len(particles)*2))),axis=1), columns=['y']+label_part)
         dict_out.to_csv(path+out_str+'dNdy_y.csv', index=False, header=True)
-
-        plot_quant(list_eta,dNdeta,r'$\eta$',f'$dN/d\eta$',plot_title,path+out_str+'dNdeta_eta',partplot=particles,log=True)
-        plot_quant(list_y,dNdy,r'$y$',f'$dN/dy$',plot_title,path+out_str+'dNdy_y',partplot=particles,log=True)
+        plot_quant(dict_out,r'$y$',f'$dN/dy$',plot_title,path+out_str+'dNdy_y',log=True)
 
     ####################################################################
     # stopping as a function of y
@@ -578,13 +577,12 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
         dNdy[:,1] = np.sqrt(dNdy[:,1])
         delta_y[1] = np.sqrt(delta_y[1])
 
-        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_y).T,dNdy),axis=1), columns=['y','dNdy','err'])
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_y).T,dNdy),axis=1), columns=['y','dNdy','dNdy_err'])
         dict_out.to_csv(path+out_str+'dNdyBBAR_y.csv', index=False, header=True)
+        plot_quant(dict_out,r'$y$',r'$dN_{B-\bar{B}}/dy$',plot_title,path+out_str+'dNdyBBAR_y')
 
-        dict_out = pd.DataFrame(np.array([[inputf['SRT'],inputf['y'],delta_y[0],delta_y[1],delta_y[0]/inputf['y'],delta_y[1]/inputf['y']]]), columns=['sqrt(s)','y','delta_y','err','delta_y/y','err'])
+        dict_out = pd.DataFrame(np.array([[inputf['SRT'],inputf['y'],delta_y[0],delta_y[1],delta_y[0]/inputf['y'],delta_y[1]/inputf['y']]]), columns=['sqrt(s)','y','delta_y','delta_y_err','delta_y/y','delta_y/y_err'])
         dict_out.to_csv(path+out_str+'stopping.csv', index=False, header=True)
-
-        plot_quant(list_y,dNdy,r'$y$',r'$dN_{B-\bar{B}}/dy$',plot_title,path+out_str+'dNdyBBAR_y')
 
     ####################################################################
     # quantities as a function of pT and mT
@@ -621,10 +619,9 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
         # calculate standard mean error as \sigma = sqrt( \sum_i \sigma(b_i)**2.)
         dNchdpT[:,1] = np.sqrt(dNchdpT[:,1])
 
-        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_pT).T,dNchdpT),axis=1), columns=['pT','dNchdpT','err'])
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_pT).T,dNchdpT),axis=1), columns=['pT','dNchdpT','dNchdpT_err'])
         dict_out.to_csv(path+out_str+'dNchdpT_pT.csv', index=False, header=True)
-
-        plot_quant(list_pT,dNchdpT,r'$p_T$ [GeV]',f'$Ed^3N_{{ch}}/d^3p|_{{|y|<{midrapy}}}\ [GeV^{{-2}}]$',plot_title,path+out_str+'dNchdpT_pT',log=True)
+        plot_quant(dict_out,r'$p_T$ [GeV]',f'$Ed^3N_{{ch}}/d^3p|_{{|y|<{midrapy}}}\ [GeV^{{-2}}]$',plot_title,path+out_str+'dNchdpT_pT',log=True)
 
         # dN/dpT & dN/dmT
         dNdpT = np.zeros((len(list_pT),len(particles),2))
@@ -646,14 +643,13 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
         dNdpT[:,:,1] = np.sqrt(dNdpT[:,:,1])
         dNdmT[:,:,1] = np.sqrt(dNdmT[:,:,1])
 
-        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_pT).T,dNdpT.reshape((len(list_pT),len(particles)*2))),axis=1), columns=['pT']+part_desc)
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_pT).T,dNdpT.reshape((len(list_pT),len(particles)*2))),axis=1), columns=['pT']+label_part)
         dict_out.to_csv(path+out_str+'dNdpT_pT.csv', index=False, header=True)
+        plot_quant(dict_out,r'$p_T$ [GeV]',f'$Ed^3N/d^3p|_{{|y|<{midrapy}}}\ [GeV^{{-2}}]$',plot_title,path+out_str+'dNdpT_pT',log=True)
 
-        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_mT).T,dNdmT.reshape((len(list_mT),len(particles)*2))),axis=1), columns=['mT']+part_desc)
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_mT).T,dNdmT.reshape((len(list_mT),len(particles)*2))),axis=1), columns=['mT']+label_part)
         dict_out.to_csv(path+out_str+'dNdmT_mT.csv', index=False, header=True)
-
-        plot_quant(list_pT,dNdpT,r'$p_T$ [GeV]',f'$Ed^3N/d^3p|_{{|y|<{midrapy}}}\ [GeV^{{-2}}]$',plot_title,path+out_str+'dNdpT_pT',partplot=particles,log=True)
-        plot_quant(list_mT,dNdmT,r'$m_T-m_0$ [GeV]',f'$Ed^3N/d^3p|_{{|y|<{midrapy}}}\ [GeV^{{-2}}]$',plot_title,path+out_str+'dNdpT_mT',partplot=particles,log=True)
+        plot_quant(dict_out,r'$m_T-m_0$ [GeV]',f'$Ed^3N/d^3p|_{{|y|<{midrapy}}}\ [GeV^{{-2}}]$',plot_title,path+out_str+'dNdpT_mT',log=True)
 
     quant_Npart()
     quant_y()
