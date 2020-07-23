@@ -2,11 +2,12 @@
 To analyze and plot heavy-ion collision data produced by the Parton-Hadron-String Dynamics (PHSD) model.
 """
 
-__version__ = '1.0.1'
+__version__ = '1.1.0'
 
 from matplotlib.pyplot import rc
 import matplotlib.pyplot as pl
 import numpy as np
+from particle import Particle
 
 ########################################################################
 def str2bool(val):
@@ -23,36 +24,13 @@ nuclei = {1:'p', 2:'d', 12:'C', 16:'O', 40: 'Ca', 63: 'Cu', 129: 'Xe',197:'Au', 
 DMN = 0.938 # nucleon mass
 ########################################################################
 # list of particles of interest with KF conversion, masses, latex label:
+particles_of_interest = ['pi+','pi-','pi0','K+','K-','p','p~','n','n~','Lambda','Lambda~',\
+  'Sigma0','Sigma~0','Sigma-','Sigma~+','Sigma+','Sigma~-','Xi-','Xi~+','Xi0','Xi~0','Omega-','Omega~+']
+
 list_part = {}
-list_part.update({211:['pi+',0.138,r'$\pi^+$']}) 
-list_part.update({-211:['pi-',0.138,r'$\pi^-$']}) # pi-
-list_part.update({111:['pi0',0.138,r'$\pi^0$']}) # pi0
-
-list_part.update({321:['K+',0.494,r'$K^+$']}) # K+
-list_part.update({-321:['K-',0.494,r'$K^-$']}) # K-
-
-list_part.update({2212:['p',DMN,r'$p$']}) # p
-list_part.update({-2212:['pbar',DMN,r'$\bar{p}$']}) # pbar
-list_part.update({2112:['n0',DMN,r'$n$']}) # n0
-list_part.update({-2112:['nbar0',DMN,r'$\bar{n}$']}) # nbar0
-
-list_part.update({3122:['Lambda0',1.115,r'$\Lambda$']}) # Lambda0
-list_part.update({-3122:['Lambdabar0',1.115,r'$\bar{\Lambda}$']}) # Lambdabar0
-
-list_part.update({3212:['Sigma0',1.189,r'$\Sigma^0$']}) # Sigma0
-list_part.update({-3212:['Sigmabar0',1.189,r'$\bar{\Sigma}^0$']}) # Sigmabar0
-list_part.update({3112:['Sigma-',1.189,r'$\Sigma^-$']}) # Sigma-
-list_part.update({-3112:['Sigmabar+',1.189,r'$\bar{\Sigma}^+$']}) # Sigmabar+
-list_part.update({3222:['Sigma+',1.189,r'$\Sigma^+$']}) # Sigma+
-list_part.update({-3222:['Sigmabar-',1.189,r'$\bar{\Sigma}^-$']}) # Sigmabar-
-
-list_part.update({3312:['Xi-',1.315,r'$\Xi^-$']}) # Xi-
-list_part.update({-3312:['Xibar+',1.315,r'$\bar{\Xi}^+$']}) # Xibar+
-list_part.update({3322:['Xi0',1.315,r'$\Xi^0$']}) # Xi0
-list_part.update({-3322:['Xibar0',1.315,r'$\bar{\Xi}^0$']}) # Xibar0
-
-list_part.update({3334:['Omega-',1.672,r'$\Omega^-$']}) # Omega-
-list_part.update({-3334:['Omegabar+',1.672,r'$\bar{\Omega}^+$']}) # Omegabar+
+for part in particles_of_interest:
+  part_obj = Particle.find(lambda p: p.name==part)
+  list_part.update({part_obj.pdgid:[part,part_obj.mass/1000.,r'$'+part_obj.latex_name+'$']})
 
 ########################################################################
 # settings for plots
@@ -130,9 +108,9 @@ def plot_quant(df,xlabel,ylabel,title,outname,log=False):
     except:
       label = r'$'+col+'$'
 
-    if(col=='Lambda0'):
+    if(col=='Lambda'):
       label += '+'+list_part[3212][2]
-    if(col=='Lambdabar0'):
+    if(col=='Lambda~'):
       label += '+'+list_part[-3212][2]
 
     # check number of columns
@@ -154,3 +132,4 @@ def plot_quant(df,xlabel,ylabel,title,outname,log=False):
 
   ax.set(xlabel=xlabel, ylabel=ylabel, title=title)
   f.savefig(f"{outname}.png")
+  pl.close(f)

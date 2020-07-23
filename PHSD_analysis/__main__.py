@@ -193,7 +193,7 @@ def read_data(path_files,inputf):
     name_part = []
     for part in list_part.values():
         name = part[0]
-        if(name!='Sigma0' and name!='Sigmabar0'): # count Lambda0 and Sigma0 together
+        if(name!='Sigma0' and name!='Sigma~0'): # count Lambda0 and Sigma0 together
             name_part.append(name)
     name_part += ['ch'] # add an item for charged particles
 
@@ -309,9 +309,9 @@ def read_data(path_files,inputf):
 
                         # count Lambda0 and Sigma0 together
                         if(name=='Sigma0'):
-                            name = 'Lambda0'
-                        if(name=='Sigmabar0'):
-                            name = 'Lambdabar0'
+                            name = 'Lambda'
+                        if(name=='Sigma~0'):
+                            name = 'Lambda~'
 
                         mT = np.sqrt(mass**2.+PX**2.+PY**2.) # transverse mass
 
@@ -329,7 +329,7 @@ def read_data(path_files,inputf):
     return dict_events,dict_bimp
 
 ########################################################################
-def calculate_quant(dict_events,dict_bimp,inputf,particles):
+def calculate_obs(dict_events,dict_bimp,inputf,particles):
 
     print('\nCalculating outputs')
 
@@ -359,7 +359,7 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
         """
         xlist = list(gen)
         mean = np.mean(xlist,axis=0)
-        sem = stats.sem(xlist)
+        sem = stats.sem(xlist,axis=0)
         # if mean is a float, just return floats
         if(isinstance(mean, float)):
             return mean,sem
@@ -386,6 +386,11 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
             Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
             gen_Npart = np.array([dict_events[f'Npart(b={xb};Nev={Nev})'] for Nev in range(Nevtot)])
             Nparts[ib] = return_mean(gen_Npart)
+
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_b).T,Nparts),axis=1), columns=['b','Npart','Npart_err'])
+        dict_out.to_csv(path+out_str+'Npart_b.csv', index=False, header=True)
+        if(len(Nparts)>1):
+            plot_quant(dict_out,r'$b [fm]$',r'$N_{part}$',plot_title,path+out_str+'Npart_b')
 
         # select particles in abs(y) < midrapy or abs(eta) < midrapeta
         deta = 2.*midrapeta
@@ -530,8 +535,8 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
         """
         print("   - dNdy of net baryons as a function of y")
 
-        list_B = ['p','n0','Lambda0','Sigma-','Sigma+','Xi0','Xi-','Omega-']
-        list_antiB = ['pbar','nbar0','Lambdabar0','Sigmabar+','Sigmabar-','Xibar0','Xibar+','Omegabar+']
+        list_B = ['p','n','Lambda','Sigma-','Sigma+','Xi0','Xi-','Omega-']
+        list_antiB = ['p~','n~','Lambda~','Sigma~+','Sigma~-','Xi~0','Xi~+','Omega~+']
 
         # select particles in abs(y) < ylim
         ylim = int(round(inputf['y'])+1)
@@ -599,7 +604,7 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
         # max values of pT, mT
         pTmax = 4.
         mTmax = 4.
-        # list of y and eta for each bin
+        # list of mT and pT for each bin
         list_mT = np.arange(start=pTbin/2.,stop=pTmax-pTbin/2.+0.0001,step=pTbin)
         list_pT = np.arange(start=mTbin/2.,stop=mTmax-mTbin/2.+0.0001,step=mTbin)
 
@@ -655,15 +660,15 @@ def calculate_quant(dict_events,dict_bimp,inputf,particles):
     quant_y()
     stopping_y()
     quant_pT()
-    
+
 ########################################################################
 def main():
     # list of particles to ouput
-    particles = ['pi+','pi-','K+','K-','p','pbar','Lambda0','Lambdabar0','Xi-','Xibar+','Omega-','Omegabar+']
+    particles = ['pi+','pi-','K+','K-','p','p~','Lambda','Lambda~','Xi-','Xi~+','Omega-','Omega~+']
 
     path_input, path_files = detect_files()
     inputf = read_input(path_input)
     dict_events,dict_bimp = read_data(path_files,inputf)
-    calculate_quant(dict_events,dict_bimp,inputf,particles)
+    calculate_obs(dict_events,dict_bimp,inputf,particles)
 
 main()
