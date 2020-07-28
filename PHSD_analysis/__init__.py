@@ -2,7 +2,7 @@
 To analyze and plot heavy-ion collision data produced by the Parton-Hadron-String Dynamics (PHSD) model.
 """
 
-__version__ = '1.1.0'
+__version__ = '1.2.0'
 
 from matplotlib.pyplot import rc
 import matplotlib.pyplot as pl
@@ -107,6 +107,9 @@ def plot_quant(df,xlabel,ylabel,title,outname,log=False):
     # if not found, use column name
     except:
       label = r'$'+col+'$'
+      if(col=='\mu_{Q}'):
+        data_y = -data_y
+        label = r'$-'+col+'$'
 
     if(col=='Lambda'):
       label += '+'+list_part[3212][2]

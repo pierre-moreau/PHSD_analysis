@@ -6,6 +6,7 @@ import argparse
 from math import pi
 from scipy import stats
 from . import *
+from EoS_HRG.test.plot_HRG import plot_freezeout
 
 ###############################################################################
 __doc__ = """Analyse the PHSD.dat files, output and plot observables"""
@@ -40,6 +41,9 @@ parser.add_argument(
 parser.add_argument(
         '--mTbin', type=float, default=0.25,
         help='bin in mT')
+parser.add_argument(
+        '--freezeout', type=str2bool, default=False,
+        help='Evaluate chemical freeze out parameters')
 args = parser.parse_args()
 
 # info about the analysis
@@ -51,6 +55,7 @@ ybin = args.ybin
 etabin = args.etabin
 pTbin = args.pTbin
 mTbin = args.mTbin
+freezeout = args.freezeout
 # path where to look for files
 path = args.folder
 
@@ -377,6 +382,7 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         Export observables as a function of Npart
         dN_ch/deta & dN_ch/dy for charged particles
         dN/dy & <pT> for each particles
+        Chemical freeze-out parameters as a function of Npart
         """
         print("   - observables as a function of Npart")
         
@@ -441,6 +447,23 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         dict_out.to_csv(path+out_str+'dNdy_Npart.csv', index=False, header=True)
         if(len(Nparts)>1):
             plot_quant(dict_out,r'$N_{part}$',r'$dN/dy$',plot_title,path+out_str+'dNdy_Npart',log=True)
+
+        if(freezeout):
+            n_freeze_param = 6 # T,muB,muQ,muS,gamma_S,dV/dy
+            freeze_out_param = np.zeros((len(list_b),n_freeze_param,2))
+            for ib,xb in enumerate(list_b):
+                dict_yield = {}
+                for ip,part in enumerate(particles):
+                    dict_yield.update({part:dict_out[part][ib]})
+                    dict_yield.update({part+'_err':dict_out[part+'_err'][ib]})
+                # PHSD results are without weak decays of hyperons (=no_feeddown for all particles)
+                fit_yields,_ = plot_freezeout(dict_yield,method='yields',chi2_plot=False,offshell=False,freezeout_decay='PHSD',no_feeddown='all',plot_file_name=path+out_str+f'freezout_b{int(10*xb):03d}') # data with plot
+                freeze_out_param[ib] = fit_yields
+
+            dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_param.reshape((len(list_b),n_freeze_param*2))),axis=1), columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err','\gamma_{S}','\gamma_{S}_err','dV/dy','dV/dY_err'])
+            dict_out.to_csv(path+out_str+'freezout_Npart.csv', index=False, header=True)
+            if(len(Nparts)>1):
+                plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart',log=True)
 
         dict_out = pd.DataFrame(np.concatenate((Nparts,mean_pT.reshape((len(list_b),len(particles)*2))),axis=1), columns=['Npart','Npart_err']+label_part)
         dict_out.to_csv(path+out_str+'pT_Npart.csv', index=False, header=True)
