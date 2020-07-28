@@ -3,7 +3,7 @@
 from setuptools import setup
 
 def version():
-    with open('__init__.py', 'r') as f:
+    with open('./PHSD_analysis/__init__.py', 'r') as f:
         for line in f:
             if line.startswith('__version__ = '):
                 return line.split("'")[1]
@@ -29,6 +29,7 @@ setup(
     author='Pierre Moreau',
     author_email='pierre.moreau@duke.edu',
     url='https://github.com/pierre-moreau/PHSD_analysis',
+    packages=['PHSD_analysis'],
     license='MIT',
     install_requires=requirements(),
     classifiers=[
