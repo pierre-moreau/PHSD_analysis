@@ -454,21 +454,35 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
             plot_quant(dict_out,r'$N_{part}$',r'$dN/dy$',plot_title,path+out_str+'dNdy_Npart',log=True)
 
         if(freezeout):
-            n_freeze_param = 7 # T,muB,muQ,muS,gamma_S,dV/dy,s/n_B
-            freeze_out_param = np.zeros((len(list_b),n_freeze_param,2))
+            n_freeze_yields = 7 # T,muB,muQ,muS,gamma_S,dV/dy,s/n_B
+            n_freeze_ratios = 6 # T,muB,muQ,muS,gamma_S,s/n_B
+            freeze_out_yields = np.zeros((len(list_b),n_freeze_yields,2))
+            freeze_out_ratios = np.zeros((len(list_b),n_freeze_ratios,2))
             for ib,xb in enumerate(list_b):
                 dict_yield = {}
                 for ip,part in enumerate(particles):
                     dict_yield.update({part:dict_out[part][ib]})
                     dict_yield.update({part+'_err':dict_out[part+'_err'][ib]})
                 # PHSD results are without weak decays of hyperons (=no_feeddown for all particles)
-                fit_result = plot_freezeout(dict_yield,method='yields',chi2_plot=False,offshell=False,freezeout_decay='PHSD',no_feeddown='all',plot_file_name=path+out_str+f'freezout_b{int(10*xb):03d}') # data with plot
-                freeze_out_param[ib] = np.append(fit_result['fit_yields'],[fit_result['snB_yields']],axis=0)
+                method = 'all'
+                fit_result = plot_freezeout(dict_yield,method=method,chi2_plot=False,offshell=False,freezeout_decay='PHSD',no_feeddown='all',plot_file_name=path+out_str+f'freezout_b{int(10*xb):03d}') # data with plot
+                if(method=='all' or method=='yields'):
+                    freeze_out_yields[ib] = np.append(fit_result['fit_yields'],[fit_result['snB_yields']],axis=0)
+                if(method=='all' or method=='ratios'):
+                    freeze_out_ratios[ib] = np.append(fit_result['fit_ratios'],[fit_result['snB_ratios']],axis=0)
 
-            dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_param.reshape((len(list_b),n_freeze_param*2))),axis=1), columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err','\gamma_{S}','\gamma_{S}_err','dV/dy','dV/dy_err','s/n_{B}','s/n_{B}_err'])
-            dict_out.to_csv(path+out_str+'freezout_Npart.csv', index=False, header=True)
-            if(len(Nparts)>1):
-                plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart',log=True)
+            if(method=='all' or method=='yields'):
+                dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_yields.reshape((len(list_b),n_freeze_yields*2))),axis=1), columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err','\gamma_{S}','\gamma_{S}_err','dV/dy','dV/dy_err','s/n_{B}','s/n_{B}_err'])
+                dict_out.to_csv(path+out_str+'freezout_Npart_yields.csv', index=False, header=True)
+                if(len(Nparts)>1):
+                    plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart_yields',log=True)
+            if(method=='all' or method=='ratios'):
+                dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_ratios.reshape((len(list_b),n_freeze_ratios*2))),axis=1), columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err','\gamma_{S}','\gamma_{S}_err','s/n_{B}','s/n_{B}_err'])
+                dict_out.to_csv(path+out_str+'freezout_Npart_ratios.csv', index=False, header=True)
+                if(len(Nparts)>1):
+                    plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart_ratios',log=True)
+
+            
 
         dict_out = pd.DataFrame(np.concatenate((Nparts,mean_pT.reshape((len(list_b),len(particles)*2))),axis=1), columns=['Npart','Npart_err']+label_part)
         dict_out.to_csv(path+out_str+'pT_Npart.csv', index=False, header=True)
