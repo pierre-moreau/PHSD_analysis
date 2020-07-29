@@ -221,14 +221,17 @@ def read_data(path_files,inputf):
                 # loop inside impact parameters over NUM
                 for _ in range(int(inputf["NUM"])):   
 
-                    # header format (first line)
-                    header1=data_file.readline()
-                    list_header1=header1.split()
-                    # N, ISUB, IRUN, BIMP, IBweight
-                    N_particles=int(list_header1[0])
-                    current_ISUB=int(list_header1[1])
-                    current_NUM=int(list_header1[2])
-                    current_b=float(list_header1[3])
+                    try:
+                        # header format (first line)
+                        header1=data_file.readline()
+                        list_header1=header1.split()
+                        # N, ISUB, IRUN, BIMP, IBweight
+                        N_particles=int(list_header1[0])
+                        current_ISUB=int(list_header1[1])
+                        current_NUM=int(list_header1[2])
+                        current_b=float(list_header1[3])
+                    except:
+                        continue
 
                     # create new entry for each b in dict if it doesn't already exist
                     try:
@@ -361,10 +364,12 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         """
         return mean and standard mean error from generator containing
         quantity for each event
+        The confidence interval is given as 3.3 (\approx t-value for 99.9% confidence interval) times the standard mean error
         """
         xlist = list(gen)
         mean = np.mean(xlist,axis=0)
-        sem = stats.sem(xlist,axis=0)
+        t_value = 3.3
+        sem = t_value*stats.sem(xlist,axis=0)
         # if mean is a float, just return floats
         if(isinstance(mean, float)):
             return mean,sem
@@ -449,7 +454,7 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
             plot_quant(dict_out,r'$N_{part}$',r'$dN/dy$',plot_title,path+out_str+'dNdy_Npart',log=True)
 
         if(freezeout):
-            n_freeze_param = 6 # T,muB,muQ,muS,gamma_S,dV/dy
+            n_freeze_param = 7 # T,muB,muQ,muS,gamma_S,dV/dy,s/n_B
             freeze_out_param = np.zeros((len(list_b),n_freeze_param,2))
             for ib,xb in enumerate(list_b):
                 dict_yield = {}
@@ -457,10 +462,10 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
                     dict_yield.update({part:dict_out[part][ib]})
                     dict_yield.update({part+'_err':dict_out[part+'_err'][ib]})
                 # PHSD results are without weak decays of hyperons (=no_feeddown for all particles)
-                fit_yields,_ = plot_freezeout(dict_yield,method='yields',chi2_plot=False,offshell=False,freezeout_decay='PHSD',no_feeddown='all',plot_file_name=path+out_str+f'freezout_b{int(10*xb):03d}') # data with plot
-                freeze_out_param[ib] = fit_yields
+                fit_result = plot_freezeout(dict_yield,method='yields',chi2_plot=False,offshell=False,freezeout_decay='PHSD',no_feeddown='all',plot_file_name=path+out_str+f'freezout_b{int(10*xb):03d}') # data with plot
+                freeze_out_param[ib] = np.append(fit_result['fit_yields'],[fit_result['snB_yields']],axis=0)
 
-            dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_param.reshape((len(list_b),n_freeze_param*2))),axis=1), columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err','\gamma_{S}','\gamma_{S}_err','dV/dy','dV/dY_err'])
+            dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_param.reshape((len(list_b),n_freeze_param*2))),axis=1), columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err','\gamma_{S}','\gamma_{S}_err','dV/dy','dV/dy_err','s/n_{B}','s/n_{B}_err'])
             dict_out.to_csv(path+out_str+'freezout_Npart.csv', index=False, header=True)
             if(len(Nparts)>1):
                 plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart',log=True)
