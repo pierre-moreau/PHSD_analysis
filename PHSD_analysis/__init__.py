@@ -135,4 +135,5 @@ def plot_quant(df,xlabel,ylabel,title,outname,log=False):
 
   ax.set(xlabel=xlabel, ylabel=ylabel, title=title)
   f.savefig(f"{outname}.png")
+  f.clf()
   pl.close(f)

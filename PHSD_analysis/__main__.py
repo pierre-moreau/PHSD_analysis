@@ -7,6 +7,7 @@ from math import pi
 from scipy import stats
 from . import *
 from EoS_HRG.test.plot_HRG import plot_freezeout
+import gc
 
 ###############################################################################
 __doc__ = """Analyse the PHSD.dat files, output and plot observables"""
@@ -392,6 +393,10 @@ def read_data(path_files,inputf):
                             np.sum(np.array([1./ybin*np.histogram(dict_particles[f'y({part})'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for part in list_B])\
                             -np.array([1./ybin*np.histogram(dict_particles[f'y({part})'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for part in list_antiB]),axis=0)
 
+                        del dict_particles
+
+        gc.collect()
+
     return dict_events,dict_bimp
 
 ########################################################################
@@ -541,12 +546,16 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
                 dict_out.to_csv(path+out_str+'freezout_Npart_ratios.csv', index=False, header=True)
                 if(len(Nparts)>1):
                     plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart_ratios',log=True)
+            
+            del freeze_out_yields,freeze_out_ratios
 
 
         dict_out = pd.DataFrame(np.concatenate((Nparts,mean_pT.reshape((len(list_b),len(particles)*2))),axis=1), columns=['Npart','Npart_err']+label_part)
         dict_out.to_csv(path+out_str+'pT_Npart.csv', index=False, header=True)
         if(len(Nparts)>1):
             plot_quant(dict_out,r'$N_{part}$',r'$\langle p_T \rangle$ [GeV]',plot_title,path+out_str+'pT_Npart')
+
+        del Nparts,dNchdeta,dNchdy,dNdy,mean_pT,dict_out
 
     ####################################################################
     # quantities as a function of y and eta
@@ -619,6 +628,8 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         dict_out.to_csv(path+out_str+'dNdy_y.csv', index=False, header=True)
         plot_quant(dict_out,r'$y$',f'$dN/dy$',plot_title,path+out_str+'dNdy_y',log=True)
 
+        del dNchdeta,dNchdy,dNdeta,dNdy,dict_out
+
     ####################################################################
     # stopping as a function of y
     def stopping_y():
@@ -628,11 +639,6 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         stopping power
         """
         print("   - dNdy of net baryons as a function of y")
-
-        # select particles in abs(y) < ylim
-        ylim = int(round(inputf['y'])+1)
-        # list of y and eta for each bin
-        list_y = np.arange(start=-ylim,stop=ylim+0.0001,step=ybin)
 
         # calculate number of participants + error
         Nparts = np.zeros((len(list_b),2))
@@ -681,6 +687,8 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         dict_out = pd.DataFrame(np.array([[inputf['SRT'],inputf['y'],delta_y[0],delta_y[1],delta_y[0]/inputf['y'],delta_y[1]/inputf['y']]]), \
             columns=['sqrt(s)','y','delta_y','delta_y_err','delta_y/y','delta_y/y_err'])
         dict_out.to_csv(path+out_str+'stopping.csv', index=False, header=True)
+
+        del Nparts,dNdyb,dNdy,delta_y,dict_out
 
     ####################################################################
     # quantities as a function of pT and mT
@@ -740,10 +748,13 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         dict_out.to_csv(path+out_str+'dNdmT_mT.csv', index=False, header=True)
         plot_quant(dict_out,r'$m_T-m_0$ [GeV]',f'$Ed^3N/d^3p|_{{|y|<{midrapy}}}\ [GeV^{{-2}}]$',plot_title,path+out_str+'dNdpT_mT',log=True)
 
+        del dNchdpT,dNdpT,dNdmT,dict_out
+
     quant_Npart()
     quant_y()
     stopping_y()
     quant_pT()
+    gc.collect()
 
 ########################################################################
 def main():
@@ -754,5 +765,7 @@ def main():
     inputf = read_input(path_input)
     dict_events,dict_bimp = read_data(path_files,inputf)
     calculate_obs(dict_events,dict_bimp,inputf,particles)
+    del particles,path_input,path_files,inputf,dict_events,dict_bimp
+    gc.collect()
 
 main()
