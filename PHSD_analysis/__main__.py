@@ -60,6 +60,11 @@ freezeout = args.freezeout
 path = args.folder
 
 ########################################################################
+# set the bin size at midrapidity
+deta = 2.*midrapeta
+dy = 2.*midrapy
+
+########################################################################
 dir_path = os.path.dirname(os.path.realpath(__file__)) # path where the script is
 print(f'Current directory: {dir_path}')
 print(f'Looking for files in: {path}')
@@ -179,6 +184,25 @@ def read_input(path_input):
     # create string for output files
     inputf.update({'collstring': f'{N1}{N2}{int(SRT)}GeV_'})
 
+    # select particles in abs(y) < ylim or abs(eta) < etalim
+    global etalim, ylim
+    etalim = int(round(inputf['y'])+1)
+    ylim = int(round(inputf['y'])+1)
+
+    # list of y and eta for each bin
+    global list_eta,list_y
+    list_eta = np.arange(start=-etalim,stop=etalim+0.0001,step=etabin)
+    list_y = np.arange(start=-ylim,stop=ylim+0.0001,step=ybin)
+
+    # max values of pT, mT
+    global pTmax,mTmax
+    pTmax = 4.
+    mTmax = 4.
+    # list of mT and pT for each bin
+    global list_pT,list_mT
+    list_mT = np.arange(start=pTbin/2.,stop=pTmax-pTbin/2.+0.0001,step=pTbin)
+    list_pT = np.arange(start=mTbin/2.,stop=mTmax-mTbin/2.+0.0001,step=mTbin)
+
     # display information about the collision
     print(f'{N1}+{N2} at $\sqrt{{s_{{NN}}}}$ = {SRT:4.1f} GeV -- TLAB = {TLAB} GeV -- yproj = {yproj}')
     print(f'BMIN = {xBMIN} fm -- BMAX = {xBMAX} fm -- DELTAB = {inputf["DBIMP"]} fm')
@@ -202,10 +226,9 @@ def read_data(path_files,inputf):
             name_part.append(name)
     name_part += ['ch'] # add an item for charged particles
 
-    # create dictionnary containing information about all particles of interests
-    # To get the list containing the rapidity values (y) of a particle for a value of impact parameter:
-    # dict_bimp[<'y', 'pT', or 'mT'>(b=<impact parameter>;<particle name>)]
-    # Ex: dict_bimp['y(b=2;Omega-)']
+    # create dictionnary containing information about all observables of interests
+    # dict_bimp[<Observable>(b=<impact parameter>;Nev=<event number>;<particle name>)]
+    # Ex: dict_bimp['dNdpT(b=2;Nev=22;Omega-)']
     dict_bimp = {}
     dict_events = {}
     # loop over all phsd.dat files
@@ -253,6 +276,8 @@ def read_data(path_files,inputf):
                     
                     # only count inelastic events
                     if(N_particles>(inputf["MASSTA"]+inputf["MASSPR"])):
+                        count_event = True
+
                         # count number of events per impact parameter
                         dict_events[f'Nevents(b={current_b})'] += 1
 
@@ -261,19 +286,22 @@ def read_data(path_files,inputf):
                         # save Npart for each event
                         dict_events.update({f'Npart(b={current_b};Nev={Nev})': Np})
 
-                        # update dict containing particle info for each event
+                        # initialize dict containing particle info for this event
+                        dict_particles = {}
                         for part in name_part:
-                            dict_bimp.update({f'y(b={current_b};Nev={Nev};{part})': [],\
-                                f'eta(b={current_b};Nev={Nev};{part})': [],\
-                                f'pT(b={current_b};Nev={Nev};{part})':[],\
-                                f'mT(b={current_b};Nev={Nev};{part})': [],\
-                                f'phi(b={current_b};Nev={Nev};{part})': []})
+                            dict_particles.update({f'y({part})': [],\
+                                f'eta({part})': [],\
+                                f'pT({part})':[],\
+                                f'mT({part})': [],\
+                                f'phi({part})': []})
+                    else:
+                        count_event = False
 
                     for _ in range(N_particles):
                         # read line
                         line = data_file.readline()
                         # only count inelastic events, read and skip
-                        if(N_particles<=(inputf["MASSTA"]+inputf["MASSPR"])):
+                        if(not(count_event)):
                             continue
                         # if B < BMIN, don't fill arrays
                         if(current_b<xBMIN):
@@ -296,10 +324,10 @@ def read_data(path_files,inputf):
                         
                         # add info into list about charged particles
                         if(IDQ!=0):
-                            dict_bimp[f'y(b={current_b};Nev={Nev};ch)'].append(y)
-                            dict_bimp[f'pT(b={current_b};Nev={Nev};ch)'].append(pT)
-                            dict_bimp[f'eta(b={current_b};Nev={Nev};ch)'].append(eta)
-                            dict_bimp[f'phi(b={current_b};Nev={Nev};ch)'].append(phi)
+                            dict_particles[f'y(ch)'].append(y)
+                            dict_particles[f'pT(ch)'].append(pT)
+                            dict_particles[f'eta(ch)'].append(eta)
+                            dict_particles[f'phi(ch)'].append(phi)
 
                         # if ID is not the list, then skip this particle 
                         # and continue with the loop
@@ -324,15 +352,45 @@ def read_data(path_files,inputf):
                         mT = np.sqrt(mass**2.+PX**2.+PY**2.) # transverse mass
 
                         # add particle info into list
-                        dict_bimp[f'y(b={current_b};Nev={Nev};{name})'].append(y)
-                        dict_bimp[f'pT(b={current_b};Nev={Nev};{name})'].append(pT)
-                        dict_bimp[f'mT(b={current_b};Nev={Nev};{name})'].append(mT)
-                        dict_bimp[f'eta(b={current_b};Nev={Nev};{name})'].append(eta)
-                        dict_bimp[f'phi(b={current_b};Nev={Nev};{name})'].append(phi)
+                        dict_particles[f'y({name})'].append(y)
+                        dict_particles[f'pT({name})'].append(pT)
+                        dict_particles[f'mT({name})'].append(mT)
+                        dict_particles[f'eta({name})'].append(eta)
+                        dict_particles[f'phi({name})'].append(phi)
 
-    # transform each list to numpy array for analysis
-    for key in dict_bimp:
-        dict_bimp[key] = np.array(dict_bimp[key])
+                    #############################################################################
+                    # calculate observables for this event and update corresponding dictionnary #
+                    #############################################################################
+                    if(count_event):
+                        # transform each list to numpy array for analysis
+                        for key in dict_particles:
+                            dict_particles[key] = np.array(dict_particles[key])
+
+                        # loop over all particles
+                        for part in name_part:
+                            dict_bimp[f'dNdeta(b={current_b};Nev={Nev};{part})'] = len(dict_particles[f'eta({part})'][abs(dict_particles[f'eta({part})']) < midrapeta])/deta
+                            dict_bimp[f'dNdy(b={current_b};Nev={Nev};{part})'] = len(dict_particles[f'y({part})'][abs(dict_particles[f'y({part})']) < midrapy])/dy
+                            dict_bimp[f'mean_pT(b={xb};Nev={Nev};{part})'] = np.mean(dict_particles[f'pT({part})'][abs(dict_particles[f'y({part})']) < midrapy])
+
+                            dict_bimp[f'dNdeta_eta(b={current_b};Nev={Nev};{part})'] = \
+                                1./etabin*np.histogram(dict_particles[f'eta({part})'],bins=len(list_eta),range=(-etalim-etabin/2.,etalim+etabin/2.))[0]
+                            dict_bimp[f'dNdy_y(b={current_b};Nev={Nev};{part})'] = \
+                                1./ybin*np.histogram(dict_particles[f'y({part})'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0]
+
+                            dict_bimp[f'dNdpT_pT(b={current_b};Nev={Nev};{part})'] = \
+                                np.histogram(dict_particles[f'pT({part})'][abs(dict_particles[f'y({part})']) < midrapy],bins=len(list_pT),range=(0,pTmax),\
+                                        weights=np.array([1./(2.*pi*pT*pTbin*dy) for pT in dict_particles[f'pT({part})'][abs(dict_particles[f'y({part})']) < midrapy]]))[0]
+                            if(part!='ch'):
+                                dict_bimp[f'dNdmT_mT(b={current_b};Nev={Nev};{part})'] = \
+                                np.histogram(dict_particles[f'mT({part})'][abs(dict_particles[f'y({part})']) < midrapy]-from_part(part)[1],bins=len(list_mT),range=(0,mTmax),\
+                                    weights=np.array([1./(2.*pi*mT*mTbin*dy) for mT in dict_particles[f'mT({part})'][abs(dict_particles[f'y({part})']) < midrapy]]))[0]
+
+                        # calculate dN/dy of baryons minus antibaryons
+                        list_B = ['p','n','Lambda','Sigma-','Sigma+','Xi0','Xi-','Omega-']
+                        list_antiB = ['p~','n~','Lambda~','Sigma~+','Sigma~-','Xi~0','Xi~+','Omega~+']
+                        dict_bimp[f'dNBBBARdy_y(b={current_b};Nev={Nev})'] = \
+                            np.sum(np.array([1./ybin*np.histogram(dict_particles[f'y({part})'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for part in list_B])\
+                            -np.array([1./ybin*np.histogram(dict_particles[f'y({part})'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for part in list_antiB]),axis=0)
 
     return dict_events,dict_bimp
 
@@ -403,10 +461,6 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         if(len(Nparts)>1):
             plot_quant(dict_out,r'$b [fm]$',r'$N_{part}$',plot_title,path+out_str+'Npart_b')
 
-        # select particles in abs(y) < midrapy or abs(eta) < midrapeta
-        deta = 2.*midrapeta
-        dy = 2.*midrapy
-
         # dN_ch/deta & dN_ch/dy + error
         dNchdeta = np.zeros((len(list_b),2))
         dNchdy = np.zeros((len(list_b),2))
@@ -414,12 +468,12 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
             Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
 
             # construct generator containing dNdchdeta at midrapidity for each event
-            gen_dNchdeta = (len(dict_bimp[f'eta(b={xb};Nev={Nev};ch)'][abs(dict_bimp[f'eta(b={xb};Nev={Nev};ch)']) < midrapeta])/deta for Nev in range(Nevtot))
+            gen_dNchdeta = (dict_bimp[f'dNdeta(b={xb};Nev={Nev};ch)'] for Nev in range(Nevtot))
             # calculate average over all events
             dNchdeta[ib] = return_mean(gen_dNchdeta)
 
             # construct generator containing dNdchdy at midrapidity for each event
-            gen_dNchdy = (len(dict_bimp[f'y(b={xb};Nev={Nev};ch)'][abs(dict_bimp[f'y(b={xb};Nev={Nev};ch)']) < midrapy])/dy for Nev in range(Nevtot))
+            gen_dNchdy = (dict_bimp[f'dNdy(b={xb};Nev={Nev};ch)'] for Nev in range(Nevtot))
             # calculate average over all events
             dNchdy[ib] = return_mean(gen_dNchdy)
 
@@ -440,11 +494,11 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
             Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
             for ip,part in enumerate(particles):
                 # construct generator containing dNdy at midrapidity for all events for the designated particle
-                gen_dNdy = (len(dict_bimp[f'y(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy])/dy for Nev in range(Nevtot))
+                gen_dNdy = (dict_bimp[f'dNdy(b={xb};Nev={Nev};{part})'] for Nev in range(Nevtot))
                 # calculate average over all events
                 dNdy[ib,ip] = return_mean(gen_dNdy)
-                # construc generator containing <pT> at midrapidity for all events for the designated particle
-                gen_mean_pT = (np.mean(dict_bimp[f'pT(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy])/dy for Nev in range(Nevtot))
+                # construct generator containing <pT> at midrapidity for all events for the designated particle
+                gen_mean_pT = (dict_bimp[f'mean_pT(b={xb};Nev={Nev};{part})'] for Nev in range(Nevtot))
                 # calculate average over all events
                 mean_pT[ib,ip] = return_mean(gen_mean_pT)
 
@@ -453,6 +507,7 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         if(len(Nparts)>1):
             plot_quant(dict_out,r'$N_{part}$',r'$dN/dy$',plot_title,path+out_str+'dNdy_Npart',log=True)
 
+        # Evaluate freeze-out parameters by using yields dN/dy at midrapidity
         if(freezeout):
             n_freeze_yields = 7 # T,muB,muQ,muS,gamma_S,dV/dy,s/n_B
             n_freeze_ratios = 6 # T,muB,muQ,muS,gamma_S,s/n_B
@@ -465,24 +520,28 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
                     dict_yield.update({part+'_err':dict_out[part+'_err'][ib]})
                 # PHSD results are without weak decays of hyperons (=no_feeddown for all particles)
                 method = 'all'
-                fit_result = plot_freezeout(dict_yield,method=method,chi2_plot=False,offshell=False,freezeout_decay='PHSD',no_feeddown='all',plot_file_name=path+out_str+f'freezout_b{int(10*xb):03d}') # data with plot
+                fit_result = plot_freezeout(dict_yield,method=method,chi2_plot=False,offshell=False,freezeout_decay='PHSD',no_feeddown='all',\
+                    plot_file_name=path+out_str+f'freezout_b{int(10*xb):03d}') # data with plot
                 if(method=='all' or method=='yields'):
                     freeze_out_yields[ib] = np.append(fit_result['fit_yields'],[fit_result['snB_yields']],axis=0)
                 if(method=='all' or method=='ratios'):
                     freeze_out_ratios[ib] = np.append(fit_result['fit_ratios'],[fit_result['snB_ratios']],axis=0)
 
             if(method=='all' or method=='yields'):
-                dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_yields.reshape((len(list_b),n_freeze_yields*2))),axis=1), columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err','\gamma_{S}','\gamma_{S}_err','dV/dy','dV/dy_err','s/n_{B}','s/n_{B}_err'])
+                dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_yields.reshape((len(list_b),n_freeze_yields*2))),axis=1), \
+                    columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err',\
+                        '\gamma_{S}','\gamma_{S}_err','dV/dy','dV/dy_err','s/n_{B}','s/n_{B}_err'])
                 dict_out.to_csv(path+out_str+'freezout_Npart_yields.csv', index=False, header=True)
                 if(len(Nparts)>1):
                     plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart_yields',log=True)
             if(method=='all' or method=='ratios'):
-                dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_ratios.reshape((len(list_b),n_freeze_ratios*2))),axis=1), columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err','\gamma_{S}','\gamma_{S}_err','s/n_{B}','s/n_{B}_err'])
+                dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_ratios.reshape((len(list_b),n_freeze_ratios*2))),axis=1), \
+                    columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err',\
+                        '\gamma_{S}','\gamma_{S}_err','s/n_{B}','s/n_{B}_err'])
                 dict_out.to_csv(path+out_str+'freezout_Npart_ratios.csv', index=False, header=True)
                 if(len(Nparts)>1):
                     plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart_ratios',log=True)
 
-            
 
         dict_out = pd.DataFrame(np.concatenate((Nparts,mean_pT.reshape((len(list_b),len(particles)*2))),axis=1), columns=['Npart','Npart_err']+label_part)
         dict_out.to_csv(path+out_str+'pT_Npart.csv', index=False, header=True)
@@ -499,13 +558,6 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         """
         print("   - observables as a function of y & eta")
 
-        # select particles in abs(y) < ylim or abs(eta) < etalim
-        etalim = int(round(inputf['y'])+1)
-        ylim = int(round(inputf['y'])+1)
-        # list of y and eta for each bin
-        list_eta = np.arange(start=-etalim,stop=etalim+0.0001,step=etabin)
-        list_y = np.arange(start=-ylim,stop=ylim+0.0001,step=ybin)
-
         # dN_ch/deta & dN_ch/dy
         dNchdeta = np.zeros((len(list_eta),2))
         dNchdy = np.zeros((len(list_y),2))
@@ -517,9 +569,9 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
             Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
 
             # construct list containing the histograms of dNch/deta(eta) for each event
-            gen_dNchdeta = (weightb/etabin*np.histogram(dict_bimp[f'eta(b={xb};Nev={Nev};ch)'],bins=len(list_eta),range=(-etalim-etabin/2.,etalim+etabin/2.))[0] for Nev in range(Nevtot))
+            gen_dNchdeta = (weightb*dict_bimp[f'dNdeta_eta(b={xb};Nev={Nev};ch)'] for Nev in range(Nevtot))
             # construct list containing the histograms of dNch/dy(y) for each event
-            gen_dNchdy = (weightb/ybin*np.histogram(dict_bimp[f'y(b={xb};Nev={Nev};ch)'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for Nev in range(Nevtot))
+            gen_dNchdy = (weightb*dict_bimp[f'dNdy_y(b={xb};Nev={Nev};ch)'] for Nev in range(Nevtot))
 
             # calculate average over all events
             dNchdeta += return_mean(gen_dNchdeta,squared=True)
@@ -547,9 +599,9 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
             Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
             for ip,part in enumerate(particles):
                 # construct list containing the histograms of dN/deta(eta) for each event for the designated particle
-                gen_dNdeta = np.array([weightb/etabin*np.histogram(dict_bimp[f'eta(b={xb};Nev={Nev};{part})'],bins=len(list_eta),range=(-etalim-etabin/2.,etalim+etabin/2.))[0] for Nev in range(Nevtot)])
+                gen_dNdeta = np.array([weightb*dict_bimp[f'dNdeta_eta(b={xb};Nev={Nev};{part})'] for Nev in range(Nevtot)])
                 # construct list containing the histograms of dN/dy(y) for each event for the designated particle
-                gen_dNdy = np.array([weightb/ybin*np.histogram(dict_bimp[f'y(b={xb};Nev={Nev};{part})'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for Nev in range(Nevtot)])
+                gen_dNdy = np.array([weightb*dict_bimp[f'dNdy_y(b={xb};Nev={Nev};{part})'] for Nev in range(Nevtot)])
                 
                 # calculate average over all events
                 dNdeta[:,ip] += return_mean(gen_dNdeta,squared=True)
@@ -577,9 +629,6 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         """
         print("   - dNdy of net baryons as a function of y")
 
-        list_B = ['p','n','Lambda','Sigma-','Sigma+','Xi0','Xi-','Omega-']
-        list_antiB = ['p~','n~','Lambda~','Sigma~+','Sigma~-','Xi~0','Xi~+','Omega~+']
-
         # select particles in abs(y) < ylim
         ylim = int(round(inputf['y'])+1)
         # list of y and eta for each bin
@@ -605,7 +654,7 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
             Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
 
             # for each event, sum histogram for dN/dy(y) over baryons/antibaryons
-            gen_dNdyb = (np.sum(np.array([weightb/ybin*np.histogram(dict_bimp[f'y(b={xb};Nev={Nev};{part})'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for part in list_B])-np.array([weightb/ybin*np.histogram(dict_bimp[f'y(b={xb};Nev={Nev};{part})'],bins=len(list_y),range=(-ylim-ybin/2.,ylim+ybin/2.))[0] for part in list_antiB]),axis=0) for Nev in range(Nevtot))
+            gen_dNdyb = (weightb*dict_bimp[f'dNBBBARdy_y(b={xb};Nev={Nev})'] for Nev in range(Nevtot))
             # calculate average over all events of dN/dy(y) baryons minus antibaryons
             dNdyb = return_mean(gen_dNdyb,squared=True)
 
@@ -618,7 +667,8 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
             # standard mean error on stopping
             # error in Npart and dNdyb should be taken into account as
             # \sigma**2(dNdyb/Npart) = (dNdyb/Npart)**2*((\sigma(dNdyb)/dNdyb)**2 + (\sigma(Npart)/Npart)**2) 
-            delta_y[1] = sum([(dNdyb[iy,0]/Nparts[ib,0])**2.*((dNdyb[iy,1]/dNdyb[iy,0])**2. + (Nparts[ib,1]/Nparts[ib,0])**2.)*abs(y)*ybin for iy,y in enumerate(list_y) if ((y<=inputf['y']) and (dNdyb[iy,0]>0))])
+            delta_y[1] = sum([(dNdyb[iy,0]/Nparts[ib,0])**2.*((dNdyb[iy,1]/dNdyb[iy,0])**2. + (Nparts[ib,1]/Nparts[ib,0])**2.)*abs(y)*ybin \
+                for iy,y in enumerate(list_y) if ((y<=inputf['y']) and (dNdyb[iy,0]>0))])
 
         # calculate standard mean error as \sigma = sqrt( \sum_i \sigma(b_i)**2.)
         dNdy[:,1] = np.sqrt(dNdy[:,1])
@@ -628,7 +678,8 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         dict_out.to_csv(path+out_str+'dNdyBBAR_y.csv', index=False, header=True)
         plot_quant(dict_out,r'$y$',r'$dN_{B-\bar{B}}/dy$',plot_title,path+out_str+'dNdyBBAR_y')
 
-        dict_out = pd.DataFrame(np.array([[inputf['SRT'],inputf['y'],delta_y[0],delta_y[1],delta_y[0]/inputf['y'],delta_y[1]/inputf['y']]]), columns=['sqrt(s)','y','delta_y','delta_y_err','delta_y/y','delta_y/y_err'])
+        dict_out = pd.DataFrame(np.array([[inputf['SRT'],inputf['y'],delta_y[0],delta_y[1],delta_y[0]/inputf['y'],delta_y[1]/inputf['y']]]), \
+            columns=['sqrt(s)','y','delta_y','delta_y_err','delta_y/y','delta_y/y_err'])
         dict_out.to_csv(path+out_str+'stopping.csv', index=False, header=True)
 
     ####################################################################
@@ -641,15 +692,6 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         """
         print("   - observables as a function of pT & mT")
 
-        # gap at midrapidity
-        dy = 2.*midrapy
-        # max values of pT, mT
-        pTmax = 4.
-        mTmax = 4.
-        # list of mT and pT for each bin
-        list_mT = np.arange(start=pTbin/2.,stop=pTmax-pTbin/2.+0.0001,step=pTbin)
-        list_pT = np.arange(start=mTbin/2.,stop=mTmax-mTbin/2.+0.0001,step=mTbin)
-
         # dN_ch/dpT & dN_ch/dmT
         dNchdpT = np.zeros((len(list_pT),2))
         # normalization for sum over b
@@ -659,7 +701,7 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
             weightb = 2.*pi*xb*inputf['DBIMP']/Anormb # weight for this b
             Nevtot = dict_events[f'Nevents(b={xb})'] # total number of events per b
             # construct array containg the histograms dNch/dpT for each event
-            gen_dNchdpT = (weightb*np.histogram(dict_bimp[f'pT(b={xb};Nev={Nev};ch)'][abs(dict_bimp[f'y(b={xb};Nev={Nev};ch)']) < midrapy],bins=len(list_pT),range=(0,pTmax),weights=np.array([1./(2.*pi*pT*pTbin*dy) for pT in dict_bimp[f'pT(b={xb};Nev={Nev};ch)'][abs(dict_bimp[f'y(b={xb};Nev={Nev};ch)']) < midrapy]]))[0] for Nev in range(Nevtot))
+            gen_dNchdpT = (weightb*dict_bimp[f'dNdpT_pT(b={xb};Nev={Nev};ch)'] for Nev in range(Nevtot))
             # calculate average over all events
             dNchdpT += return_mean(gen_dNchdpT,squared=True)
 
@@ -679,8 +721,8 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
             weightb = 2.*pi*xb*inputf['DBIMP']/Anormb # weight for this b
             for ip,part in enumerate(particles):
                 weightb = 2.*pi*xb*inputf['DBIMP']/Anormb # weight for this b
-                gen_dNdpT = (weightb*np.histogram(dict_bimp[f'pT(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy],bins=len(list_pT),range=(0,pTmax),weights=np.array([1./(2.*pi*pT*pTbin*dy) for pT in dict_bimp[f'pT(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy]]))[0] for Nev in range(Nevtot))
-                gen_dNdmT = (weightb*np.histogram(dict_bimp[f'mT(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy]-from_part(part)[1],bins=len(list_mT),range=(0,mTmax),weights=np.array([1./(2.*pi*mT*mTbin*dy) for mT in dict_bimp[f'mT(b={xb};Nev={Nev};{part})'][abs(dict_bimp[f'y(b={xb};Nev={Nev};{part})']) < midrapy]]))[0] for Nev in range(Nevtot))
+                gen_dNdpT = (weightb*dict_bimp[f'dNdpT_pT(b={xb};Nev={Nev};{part})'] for Nev in range(Nevtot))
+                gen_dNdmT = (weightb*dict_bimp[f'dNdmT_mT(b={xb};Nev={Nev};{part})'] for Nev in range(Nevtot))
 
                 # calculate average over all events
                 dNdpT[:,ip] += return_mean(gen_dNdpT,squared=True)

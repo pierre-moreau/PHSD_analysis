@@ -2,7 +2,7 @@
 To analyze and plot heavy-ion collision data produced by the Parton-Hadron-String Dynamics (PHSD) model.
 """
 
-__version__ = '1.2.0'
+__version__ = '1.3.0'
 
 from matplotlib.pyplot import rc
 import matplotlib.pyplot as pl
@@ -24,7 +24,7 @@ nuclei = {1:'p', 2:'d', 12:'C', 16:'O', 40: 'Ca', 63: 'Cu', 129: 'Xe',197:'Au', 
 DMN = 0.938 # nucleon mass
 ########################################################################
 # list of particles of interest with KF conversion, masses, latex label:
-particles_of_interest = ['pi+','pi-','pi0','K+','K-','p','p~','n','n~','Lambda','Lambda~',\
+particles_of_interest = ['pi+','pi-','pi0','K+','K-','K0','K~0','eta','p','p~','n','n~','Lambda','Lambda~',\
   'Sigma0','Sigma~0','Sigma-','Sigma~+','Sigma+','Sigma~-','Xi-','Xi~+','Xi0','Xi~0','Omega-','Omega~+']
 
 list_part = {}
