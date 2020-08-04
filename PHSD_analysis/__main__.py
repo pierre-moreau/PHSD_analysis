@@ -516,8 +516,12 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
         if(freezeout):
             n_freeze_yields = 7 # T,muB,muQ,muS,gamma_S,dV/dy,s/n_B
             n_freeze_ratios = 6 # T,muB,muQ,muS,gamma_S,s/n_B
+            n_freeze_yields_nS0 = 7 # T,muB,muQ,muS,gamma_S,dV/dy,s/n_B
+            n_freeze_ratios_nS0 = 6 # T,muB,muQ,muS,gamma_S,s/n_B
             freeze_out_yields = np.zeros((len(list_b),n_freeze_yields,2))
             freeze_out_ratios = np.zeros((len(list_b),n_freeze_ratios,2))
+            freeze_out_yields_nS0 = np.zeros((len(list_b),n_freeze_yields_nS0,2))
+            freeze_out_ratios_nS0 = np.zeros((len(list_b),n_freeze_ratios_nS0,2))
             for ib,xb in enumerate(list_b):
                 dict_yield = {}
                 for ip,part in enumerate(particles):
@@ -529,8 +533,10 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
                     plot_file_name=path+out_str+f'freezout_b{int(10*xb):03d}') # data with plot
                 if(method=='all' or method=='yields'):
                     freeze_out_yields[ib] = np.append(fit_result['fit_yields'],[fit_result['snB_yields']],axis=0)
+                    freeze_out_yields_nS0[ib] = np.append(fit_result['fit_yields_nS0'],[fit_result['snB_yields_nS0']],axis=0)
                 if(method=='all' or method=='ratios'):
                     freeze_out_ratios[ib] = np.append(fit_result['fit_ratios'],[fit_result['snB_ratios']],axis=0)
+                    freeze_out_ratios_nS0[ib] = np.append(fit_result['fit_ratios_nS0'],[fit_result['snB_ratios_nS0']],axis=0)
 
             if(method=='all' or method=='yields'):
                 dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_yields.reshape((len(list_b),n_freeze_yields*2))),axis=1), \
@@ -539,6 +545,14 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
                 dict_out.to_csv(path+out_str+'freezout_Npart_yields.csv', index=False, header=True)
                 if(len(Nparts)>1):
                     plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart_yields',log=True)
+
+                dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_yields_nS0.reshape((len(list_b),n_freeze_yields_nS0*2))),axis=1), \
+                    columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err',\
+                        '\gamma_{S}','\gamma_{S}_err','dV/dy','dV/dy_err','s/n_{B}','s/n_{B}_err'])
+                dict_out.to_csv(path+out_str+'freezout_Npart_yields_nS0.csv', index=False, header=True)
+                if(len(Nparts)>1):
+                    plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart_yields_nS0',log=True)
+
             if(method=='all' or method=='ratios'):
                 dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_ratios.reshape((len(list_b),n_freeze_ratios*2))),axis=1), \
                     columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err',\
@@ -546,6 +560,13 @@ def calculate_obs(dict_events,dict_bimp,inputf,particles):
                 dict_out.to_csv(path+out_str+'freezout_Npart_ratios.csv', index=False, header=True)
                 if(len(Nparts)>1):
                     plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart_ratios',log=True)
+
+                dict_out = pd.DataFrame(np.concatenate((Nparts,freeze_out_ratios_nS0.reshape((len(list_b),n_freeze_ratios_nS0*2))),axis=1), \
+                    columns=['Npart','Npart_err','T_{ch}','T_{ch}_err','\mu_{B}','\mu_{B}_err','\mu_{Q}','\mu_{Q}_err','\mu_{S}','\mu_{S}_err',\
+                        '\gamma_{S}','\gamma_{S}_err','s/n_{B}','s/n_{B}_err'])
+                dict_out.to_csv(path+out_str+'freezout_Npart_ratios_nS0.csv', index=False, header=True)
+                if(len(Nparts)>1):
+                    plot_quant(dict_out,r'$N_{part}$','freezeout parameters',plot_title,path+out_str+'freezeout_Npart_ratios_nS0',log=True)
             
             del freeze_out_yields,freeze_out_ratios
 
