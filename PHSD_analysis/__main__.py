@@ -2,10 +2,11 @@ import os # to get the path of the current directory
 import re
 import pandas as pd
 import argparse
-from math import pi
+from math import pi,copysign
 from scipy import stats
 from . import *
 from EoS_HRG.test.plot_HRG import plot_freezeout
+import time
 
 ###############################################################################
 __doc__ = """Analyse the PHSD.dat files, output and plot observables"""
@@ -228,39 +229,43 @@ def read_data(path_files,inputf):
     list_b_all = np.arange(start=inputf["BMIN"],stop=inputf["BMAX"]+0.0001,step=inputf['DBIMP'])
 
     ########################################################################
-    def histogram(list,edges,weights=1):
+    def histogram(list,edges,weights=1,weight_self=False,shift=0.):
         """
-        compute histogram, to replace np.histogram
-        histo = np.histogram(list,bins=nbin,range=(edges[0],edges[-1]),weights=weights)[0]
+        compute histogram, interface to np.histogram
         """
         nbin = len(edges)-1
-        histo = np.zeros(nbin)
-        if(isinstance(weights,float)):
-            weights = weights*np.ones(len(list))
+        weights = weights*np.ones(len(list))
+        if(weight_self):
+            weights /= list
 
-        for iitem,item in enumerate(list):
-            for i in range(nbin):
-                if(edges[i]<item and item<edges[i+1]):
-                    histo[i] += weights[iitem]
-                    break
-        return histo
-
-    # create a list containing name of particles of interest
-    name_part = []
-    for part in list_part.values():
-        name = part[0]
-        if(name!='Sigma0' and name!='Sigma~0'): # count Lambda0 and Sigma0 together
-            name_part.append(name)
-    name_part += ['ch'] # add an item for charged particles
+        return np.histogram(list-shift,bins=nbin,range=(edges[0],edges[-1]),weights=weights)[0]
 
     # create dictionnary containing information about all observables of interests
     # dict_obs[<Observable>(b=<impact parameter>;<particle name>)]
     # Ex: dict_obs['dNdpT(b=2;Omega-)']
     dict_obs = {}
+
+    ########################################################################
+    def add_obs(obs,part=None):
+        """
+        Add observable of each event in dict_event to dict_obs
+        """
+        if(part==None):
+            string_obs = f'{obs}(b={current_b})'
+        else:
+            string_obs = f'{obs}(b={current_b};{part})'
+        data = dict_event[string_obs]
+        if(isinstance(data,float)):
+            dict_obs[string_obs] += [data,data**2.]
+        else:
+            dict_obs[string_obs] += list(zip(data,data**2.))
+
     # loop over all phsd.dat files
     for xfile in path_files:
         print(f'Reading {xfile}')
         with open (xfile,"r") as data_file:
+            start = time.time()
+            time_obs = 0.
 
             # loop inside files over impact parameter
             for xb in list_b_all:
@@ -290,7 +295,7 @@ def read_data(path_files,inputf):
                         except:
                             dict_obs.update({f'Nevents(b={current_b})': 0})
                             dict_obs.update({f'Npart(b={current_b})': np.zeros(2)})
-                            for part in name_part:
+                            for part in particle_analysis:
                                 dict_obs.update({f'dNdeta(b={current_b};{part})': np.zeros(2)})
                                 dict_obs.update({f'dNdy(b={current_b};{part})': np.zeros(2)})
                                 dict_obs.update({f'mean_pT(b={current_b};{part})': np.zeros(2)})
@@ -325,8 +330,9 @@ def read_data(path_files,inputf):
 
                             # initialize dict containing particle info for this event
                             dict_particles = {}
-                            for part in name_part:
-                                dict_particles.update({f'y({part})': [],\
+                            for part in particle_analysis:
+                                dict_particles.update({\
+                                    f'y({part})': [],\
                                     f'eta({part})': [],\
                                     f'pT({part})':[],\
                                     f'mT({part})': [],\
@@ -353,88 +359,80 @@ def read_data(path_files,inputf):
                             P0 = float(list_line[5])
                             iHist = int(list_line[6])
 
-                            # don't count spectator neutrons and protons
-                            if(ID==2212 or ID==2112):
-                                # if |y| > yproj-0.5, don't count
-                                # 0.5 is arbitrary, but works fine
+                            try:
+                                name = part_name[ID]
+                                part_mass = mass[name]
+                            except:
+                                continue
+
+                            y = 0.5*np.log((P0+PZ)/(P0-PZ))
+
+                            if(name=='p' or name=='n'):
+                            # if |y| > yproj-0.5, don't count
+                            # 0.5 is arbitrary, but works fine
                                 if((iHist==-1) and (abs(y)>(inputf['y']-0.5))):
                                     continue
 
-                            y = 0.5*np.log((P0+PZ)/(P0-PZ)) # rapidity
-                            PP = np.sqrt(PX**2.+PY**2.+PZ**2.) # momentum
-                            eta = 0.5*np.log((PP+PZ)/(PP-PZ)) # pseudo-rapidity
-                            pT = np.sqrt(PX**2.+PY**2.) # transverse momentum
-                            phi = np.arctan2(PY,PX) # angle phi
+                            PP = np.sqrt(PX**2.+PY**2.+PZ**2.)
+                            eta = 0.5*np.log((PP+PZ)/(PP-PZ))
+                            pT = np.sqrt(PX**2.+PY**2.)
+                            mT = np.sqrt(pT**2.+part_mass**2.)
+                            phi = np.arctan2(PY,PX)
 
                             # add info into list about charged particles
                             if(IDQ!=0):
-                                dict_particles[f'y(ch)'].append(y)
-                                dict_particles[f'pT(ch)'].append(pT)
-                                dict_particles[f'eta(ch)'].append(eta)
-                                dict_particles[f'phi(ch)'].append(phi)
-
-                            # if ID is not the list, then skip this particle 
-                            # and continue with the loop
-                            try:
-                                name,mass,_ = list_part[ID]
-                            except:
-                                continue
+                                dict_particles['y(ch)'].append(y)
+                                dict_particles['eta(ch)'].append(eta)
+                                dict_particles['pT(ch)'].append(pT)
+                                dict_particles['phi(ch)'].append(phi)
 
                             # count Lambda0 and Sigma0 together
                             if(name=='Sigma0'):
                                 name = 'Lambda'
-                            if(name=='Sigma~0'):
+                            elif(name=='Sigma~0'):
                                 name = 'Lambda~'
 
-                            mT = np.sqrt(mass**2.+PX**2.+PY**2.) # transverse mass
-
-                            # add particle info into list
                             dict_particles[f'y({name})'].append(y)
+                            dict_particles[f'eta({name})'].append(eta)
                             dict_particles[f'pT({name})'].append(pT)
                             dict_particles[f'mT({name})'].append(mT)
-                            dict_particles[f'eta({name})'].append(eta)
                             dict_particles[f'phi({name})'].append(phi)
 
                         #############################################################################
                         # calculate observables for this event and update corresponding dictionnary #
                         #############################################################################
+                        start_obs = time.time()
                         if(count_event):
                             dict_event = {}
+                            dict_event[f'dNBBBARdy_y(b={current_b})'] = np.zeros(len(list_y))
+
                             # transform each list to numpy array for analysis
                             for key in dict_particles:
                                 dict_particles[key] = np.array(dict_particles[key])
 
-                            def add_obs(obs,part=None):
-                                """
-                                Add observable of each event in dict_event to dict_obs
-                                """
-                                if(part==None):
-                                    string_obs = f'{obs}(b={current_b})'
-                                else:
-                                    string_obs = f'{obs}(b={current_b};{part})'
-                                data = dict_event[string_obs]
-                                if(isinstance(data,float)):
-                                    dict_obs[string_obs] += [data,data**2.]
-                                else:
-                                    dict_obs[string_obs] += list(zip(data,data**2.))
-
                             # loop over all particles
-                            for part in name_part:
-                                # midrapidity cuts
-                                cond_midrapeta = abs(dict_particles[f'eta({part})']) < midrapeta
+                            for part in particle_analysis:
+                                # particles midrapidity
                                 cond_midrapy = abs(dict_particles[f'y({part})']) < midrapy
+                                # particles at midrapidity
+                                cond_midrapeta = abs(dict_particles[f'eta({part})']) < midrapeta
+                                # pT at midrapidity
+                                pT_midrapy = dict_particles[f'pT({part})'][cond_midrapy]
+                                # transverse mass mT
+                                if(part!='ch'):
+                                    # mT at midrapidity
+                                    mT_midrapy = dict_particles[f'mT({part})'][cond_midrapy]
 
                                 # dNdeta
-                                dict_event[f'dNdeta(b={current_b};{part})'] = len(dict_particles[f'eta({part})'][cond_midrapeta])/deta
+                                dict_event[f'dNdeta(b={current_b};{part})'] = np.sum(cond_midrapeta)/deta
                                 add_obs('dNdeta',part)
                                 # dNdy
-                                dict_event[f'dNdy(b={current_b};{part})'] = len(dict_particles[f'y({part})'][cond_midrapy])/dy
+                                dict_event[f'dNdy(b={current_b};{part})'] = np.sum(cond_midrapy)/dy
                                 add_obs('dNdy',part)
                                 # mean pT
-                                particles_pT = dict_particles[f'pT({part})'][cond_midrapy]
-                                if(len(particles_pT)>0):
-                                    dict_obs[f'mean_pT(b={current_b};{part})'] += [particles_pT.sum(),(particles_pT**2.).sum()]
-                                    dict_obs[f'N_mean_pT(b={current_b};{part})'] += len(particles_pT)
+                                if(len(pT_midrapy)>0):
+                                    dict_obs[f'mean_pT(b={current_b};{part})'] += [np.sum(pT_midrapy),(np.sum(pT_midrapy**2.))]
+                                    dict_obs[f'N_mean_pT(b={current_b};{part})'] += len(pT_midrapy)
 
                                 # dNdeta_eta
                                 dict_event[f'dNdeta_eta(b={current_b};{part})'] = \
@@ -446,24 +444,31 @@ def read_data(path_files,inputf):
                                 add_obs('dNdy_y',part)
 
                                 # dNdpT_pT
-                                dict_event[f'dNdpT_pT(b={current_b};{part})'] = histogram(dict_particles[f'pT({part})'][cond_midrapy],edges_pT,\
-                                        weights=np.array([1./(2.*pi*pT*pTbin*dy) for pT in dict_particles[f'pT({part})'][cond_midrapy]]))
+                                dict_event[f'dNdpT_pT(b={current_b};{part})'] = \
+                                        histogram(pT_midrapy,edges_pT,\
+                                        weights=1./(2.*pi*pTbin*dy),weight_self=True)
                                 add_obs('dNdpT_pT',part)
                                 # dNdmT_mT
                                 if(part!='ch'):
-                                    dict_event[f'dNdmT_mT(b={current_b};{part})'] = histogram(dict_particles[f'mT({part})'][cond_midrapy]-from_part(part)[1],edges_pT,\
-                                        weights=np.array([1./(2.*pi*mT*mTbin*dy) for mT in dict_particles[f'mT({part})'][cond_midrapy]]))
+                                    dict_event[f'dNdmT_mT(b={current_b};{part})'] = \
+                                        histogram(mT_midrapy,edges_mT,\
+                                        weights=1./(2.*pi*mTbin*dy),weight_self=True,shift=mass[part])
                                     add_obs('dNdmT_mT',part)
+                                
+                                # calculate dN/dy of baryons minus antibaryons
+                                if(part!='ch'):
+                                    ID = PDGID[part]
+                                    factor = copysign(1.,ID)*float(ID.is_baryon)
+                                    dict_event[f'dNBBBARdy_y(b={current_b})'] += factor*histogram(dict_particles[f'y({part})'],edges_y,weights=1./ybin)
 
-                            # calculate dN/dy of baryons minus antibaryons
-                            list_B = ['p','n','Lambda','Sigma-','Sigma+','Xi0','Xi-','Omega-']
-                            list_antiB = ['p~','n~','Lambda~','Sigma~+','Sigma~-','Xi~0','Xi~+','Omega~+']
-                            dict_event[f'dNBBBARdy_y(b={current_b})'] = \
-                                np.sum(np.array([histogram(dict_particles[f'y({part})'],edges_y,weights=1./ybin) for part in list_B])\
-                                -np.array([histogram(dict_particles[f'y({part})'],edges_y,weights=1./ybin) for part in list_antiB]),axis=0)
                             add_obs('dNBBBARdy_y')
 
-                            del dict_particles,dict_event,cond_midrapeta,cond_midrapy
+                            del dict_particles,dict_event,cond_midrapeta,cond_midrapy   
+                        end_obs = time.time()
+                        time_obs += end_obs-start_obs
+
+            end = time.time()
+            print(f'Took in total {end-start}s, {time_obs}s for the analysis')
 
     return dict_obs
 

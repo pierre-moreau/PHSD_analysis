@@ -2,7 +2,7 @@
 To analyze and plot heavy-ion collision data produced by the Parton-Hadron-String Dynamics (PHSD) model.
 """
 
-__version__ = '1.5.0'
+__version__ = '1.6.0'
 
 from matplotlib.pyplot import rc
 import matplotlib.pyplot as pl
@@ -27,10 +27,22 @@ DMN = 0.938 # nucleon mass
 particles_of_interest = ['pi+','pi-','pi0','K+','K-','K0','K~0','eta','p','p~','n','n~','Lambda','Lambda~',\
   'Sigma0','Sigma~0','Sigma-','Sigma~+','Sigma+','Sigma~-','Xi-','Xi~+','Xi0','Xi~0','Omega-','Omega~+']
 
-list_part = {}
-for part in particles_of_interest:
-  part_obj = Particle.find(lambda p: p.name==part)
-  list_part.update({part_obj.pdgid:[part,part_obj.mass/1000.,r'$'+part_obj.latex_name+'$']})
+# create a list containing name of particles of interests for the analysis
+particle_analysis = particles_of_interest[:]
+particle_analysis.remove('Sigma0')
+particle_analysis.remove('Sigma~0')
+particle_analysis.append('ch')
+
+part_name = {}
+mass = {}
+PDGID = {}
+latex_name = {}
+for name in particles_of_interest:
+  part_obj = Particle.find(lambda p: p.name==name)
+  part_name.update({int(part_obj.pdgid): name})
+  mass.update({name: part_obj.mass/1000.})
+  PDGID.update({name: part_obj.pdgid})
+  latex_name.update({name: r'$'+part_obj.latex_name+'$'})
 
 ########################################################################
 # settings for plots
@@ -51,14 +63,6 @@ rc('ytick.major', size=7, width=3, pad=10)
 rc('legend', fontsize=SMALL_SIZE, title_fontsize=SMALL_SIZE, handletextpad=0.25)    # legend fontsize
 rc('figure', titlesize=BIGGER_SIZE, titleweight='bold')  # fontsize of the figure title
 rc('savefig', dpi=300, bbox='tight')
-
-########################################################################
-def from_part(namepart):
-    # find label in dict list_part
-    for xpart,mass,label in list_part.values():
-      if(xpart==namepart):
-        return xpart,mass,label
-    raise Exception(f'particle {namepart} not found in list_part')
 
 ########################################################################
 def plot_quant(df,xlabel,ylabel,title,outname,log=False):
@@ -103,7 +107,7 @@ def plot_quant(df,xlabel,ylabel,title,outname,log=False):
 
     # try to find label in particles
     try:
-      _,_,label = from_part(col)
+      label = latex_name[col]
     # if not found, use column name
     except:
       label = r'$'+col+'$'
@@ -112,9 +116,9 @@ def plot_quant(df,xlabel,ylabel,title,outname,log=False):
         label = r'$-'+col+'$'
 
     if(col=='Lambda'):
-      label += '+'+list_part[3212][2]
+      label += '+'+latex_name['Sigma0']
     if(col=='Lambda~'):
-      label += '+'+list_part[-3212][2]
+      label += '+'+latex_name['Sigma~0']
 
     # check number of columns
     # if just one column (y & y_err) to plot, no label
