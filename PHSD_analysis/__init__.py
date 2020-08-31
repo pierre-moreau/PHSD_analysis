@@ -38,7 +38,10 @@ mass = {}
 PDGID = {}
 latex_name = {}
 for name in particles_of_interest:
-  part_obj = Particle.find(lambda p: p.name==name)
+  try:
+    part_obj = Particle.find(lambda p: p.name==name)
+  except:
+    part_obj = Particle.findall(lambda p: p.name==name)[0]
   part_name.update({int(part_obj.pdgid): name})
   mass.update({name: part_obj.mass/1000.})
   PDGID.update({name: part_obj.pdgid})

@@ -7,6 +7,7 @@ from scipy import stats
 from . import *
 from EoS_HRG.test.plot_HRG import plot_freezeout
 import time
+from tqdm import trange
 
 ###############################################################################
 __doc__ = """Analyse the PHSD.dat files, output and plot observables"""
@@ -111,6 +112,7 @@ def detect_files():
     # just read inputPHSD once
     path_input = path_files[0].replace('phsd.dat','inputPHSD')
 
+    path_files.sort()
     # display list of folders found
     print(f'\nThese files have been found: {path_files}')
 
@@ -216,7 +218,7 @@ def read_input(path_input):
     # display information about the collision
     print(f'{N1}+{N2} at $\sqrt{{s_{{NN}}}}$ = {SRT:4.1f} GeV -- TLAB = {TLAB} GeV -- yproj = {yproj}')
     print(f'BMIN = {xBMIN} fm -- BMAX = {xBMAX} fm -- DELTAB = {inputf["DBIMP"]} fm')
-    print(f'NUM = {inputf["NUM"]} \n')
+    print(f'ISUBS = {int(inputf["ISUBS"])} -- NUM = {int(inputf["NUM"])} \n')
 
     return inputf
 
@@ -273,9 +275,15 @@ def read_data(path_files,inputf):
                 if(xb>xBMAX):
                     break
                 # loop inside impact parameters over ISUB
-                for _ in range(int(inputf["ISUBS"])):
+                for ISUB in range(int(inputf["ISUBS"])):
+
+                    if(xb<xBMIN):
+                        print(f'   - ISUB = {ISUB+1} ; B = {xb} fm ; (not counted)')
+                    else:
+                        print(f'   - ISUB = {ISUB+1} ; B = {xb} fm')
+
                     # loop inside ISUB over NUM
-                    for _ in range(int(inputf["NUM"])):
+                    for _ in trange(int(inputf["NUM"]),desc='     NUM'):
 
                         try:
                             # header format (first line)
@@ -311,12 +319,6 @@ def read_data(path_files,inputf):
                         list_header2=header2.split()
                         # Np, phi2, epsi2, phi3, epsi3, phi4, epsi4, phi5, epsi5
                         Np = float(list_header2[0]) # number of participants
-
-                        if(current_NUM==1):
-                            if(current_b<xBMIN):
-                                print(f'   - ISUB = {current_ISUB} ; B = {current_b} fm ; (not counted)')
-                            else:
-                                print(f'   - ISUB = {current_ISUB} ; B = {current_b} fm')
                     
                         # only count inelastic events
                         if(N_particles>(inputf["MASSTA"]+inputf["MASSPR"])):
