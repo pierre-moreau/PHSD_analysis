@@ -2,7 +2,7 @@
 To analyze and plot heavy-ion collision data produced by the Parton-Hadron-String Dynamics (PHSD) model.
 """
 
-__version__ = '1.6.0'
+__version__ = '1.7.0'
 
 from matplotlib.pyplot import rc
 import matplotlib.pyplot as pl
@@ -24,7 +24,7 @@ nuclei = {1:'p', 2:'d', 12:'C', 16:'O', 40: 'Ca', 63: 'Cu', 129: 'Xe',197:'Au', 
 DMN = 0.938 # nucleon mass
 ########################################################################
 # list of particles of interest with KF conversion, masses, latex label:
-particles_of_interest = ['pi+','pi-','pi0','K+','K-','K0','K~0','eta','p','p~','n','n~','Lambda','Lambda~',\
+particles_of_interest = ['pi+','pi-','K+','K-','K0','K~0','eta','p','p~','n','n~','Lambda','Lambda~',\
   'Sigma0','Sigma~0','Sigma-','Sigma~+','Sigma+','Sigma~-','Xi-','Xi~+','Xi0','Xi~0','Omega-','Omega~+']
 
 # create a list containing name of particles of interests for the analysis
@@ -33,18 +33,20 @@ particle_analysis.remove('Sigma0')
 particle_analysis.remove('Sigma~0')
 particle_analysis.append('ch')
 
-part_name = {}
-mass = {}
-PDGID = {}
+particle_info = {}
 latex_name = {}
 for name in particles_of_interest:
   try:
     part_obj = Particle.find(lambda p: p.name==name)
   except:
     part_obj = Particle.findall(lambda p: p.name==name)[0]
-  part_name.update({int(part_obj.pdgid): name})
-  mass.update({name: part_obj.mass/1000.})
-  PDGID.update({name: part_obj.pdgid})
+  ID = part_obj.pdgid
+  xname=name
+  if(name=='Sigma0'):
+    xname = 'Lambda'
+  elif(name=='Sigma~0'):
+    xname = 'Lambda~'
+  particle_info.update({int(ID): [xname,part_obj.mass/1000.,np.sign(ID)*ID.is_baryon]})
   latex_name.update({name: r'$'+part_obj.latex_name+'$'})
 
 ########################################################################
