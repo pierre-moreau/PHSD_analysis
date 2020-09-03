@@ -35,7 +35,7 @@ particle_analysis.append('ch')
 
 particle_info = {}
 latex_name = {}
-for name in particles_of_interest:
+for ipart,name in enumerate(particles_of_interest):
   try:
     part_obj = Particle.find(lambda p: p.name==name)
   except:
@@ -46,7 +46,7 @@ for name in particles_of_interest:
     xname = 'Lambda'
   elif(name=='Sigma~0'):
     xname = 'Lambda~'
-  particle_info.update({int(ID): [xname,part_obj.mass/1000.,np.sign(ID)*ID.is_baryon]})
+  particle_info.update({int(ID): [xname,part_obj.mass/1000.,np.sign(ID)*ID.is_baryon,ipart]})
   latex_name.update({name: r'$'+part_obj.latex_name+'$'})
 
 ########################################################################

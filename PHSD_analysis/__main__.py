@@ -296,7 +296,7 @@ def read_data(path_files,inputf):
             dict_event[string_event][ibin] += weight
 
     ########################################################################
-    def add_obs(obs,xb,part=None):
+    def add_obs(obs,xb,part,bool_float=True):
         """
         Add observable of each event in dict_event to dict_obs
         """
@@ -308,10 +308,10 @@ def read_data(path_files,inputf):
             string_obs = f'{obs}(b={xb})'
 
         data = dict_event[string_event]
-        if(isinstance(data,float)):
-            dict_obs[string_obs] += [data,data**2.]
+        if(bool_float):
+            dict_obs[string_obs] += np.array([data,data**2.])
         else:
-            dict_obs[string_obs] += list(zip(data,data**2.))
+            dict_obs[string_obs] += np.column_stack((data,data**2.))
 
     ########################################################################
     # loop over all phsd.dat files
@@ -344,7 +344,7 @@ def read_data(path_files,inputf):
                             # header (2nd line)
                             header2 = np.loadtxt(data_file,dtype=header2_dtype,max_rows=1)
                             # read particles
-                            list_particles = np.loadtxt(data_file,dtype=parts_dtype,max_rows=N_particles)
+                            list_particles = np.array(np.loadtxt(data_file,dtype=parts_dtype,max_rows=N_particles).tolist())
                         except:
                             continue
 
@@ -361,9 +361,7 @@ def read_data(path_files,inputf):
                             #############################################################################
                             # calculate observables for this event and update corresponding dictionnary #
                             #############################################################################
-
-                            #dict_event = read_particles(list_particles,particle_analysis,inputf,particle_info)
-
+                            
                             # initialize dict containing particle info for this event
                             dict_event = {}
                             for part in particle_analysis:
@@ -377,27 +375,27 @@ def read_data(path_files,inputf):
                                 dict_event.update({f'dNdmT_mT({part})': np.zeros((len(list_mT)))})
                             dict_event.update({'dNBBBARdy_y': np.zeros((len(list_y)))})
 
-                            for line in list_particles:
+                            for ID,IDQ,PX,PY,PZ,P0,iHist,_ in list_particles:
                                 try:
-                                    name,part_mass,baryon_N = particle_info[line['ID']]
+                                    name,part_mass,baryon_N,_ = particle_info[ID]
                                 except:
                                     continue
 
-                                y = 0.5*np.log((line['P0']+line['PZ'])/(line['P0']-line['PZ']))
+                                y = 0.5*np.log((P0+PZ)/(P0-PZ))
 
                                 if(name=='p' or name=='n'):
                                 # if |y| > yproj-0.5, don't count
                                 # 0.5 is arbitrary, but works fine
-                                    if((line['iHist']==-1) and (abs(y)>(inputf['y']-0.5))):
+                                    if((iHist==-1) and (abs(y)>(inputf['y']-0.5))):
                                         continue
 
-                                PP = np.sqrt(line['PX']**2.+line['PY']**2.+line['PZ']**2.)
-                                eta = 0.5*np.log((PP+line['PZ'])/(PP-line['PZ']))
-                                pT = np.sqrt(line['PX']**2.+line['PY']**2.)
+                                PP = np.sqrt(PX**2.+PY**2.+PZ**2.)
+                                eta = 0.5*np.log((PP+PZ)/(PP-PZ))
+                                pT = np.sqrt(PX**2.+PY**2.)
                                 mT = np.sqrt(pT**2.+part_mass**2.)
-                                #phi = np.arctan2(line['PY'],line['PX'])
+                                #phi = np.arctan2(PY,PX)
 
-                                if(line['IDQ']!=0):
+                                if(IDQ!=0):
                                     if(abs(eta)<=midrapeta):
                                         # dN/deta
                                         dict_event['dNdeta(ch)'] += 1./deta
@@ -448,15 +446,16 @@ def read_data(path_files,inputf):
                                 dict_obs[f'mean_pT(b={current_b};{part})'] += dict_event[f'mean_pT({part})']
                                 dict_obs[f'N_mean_pT(b={current_b};{part})'] += dict_event[f'N_mean_pT({part})']
                                 # dNdeta_eta
-                                add_obs('dNdeta_eta',current_b,part)
+                                add_obs('dNdeta_eta',current_b,part,False)
                                 # dNdy_y
-                                add_obs('dNdy_y',current_b,part)
+                                add_obs('dNdy_y',current_b,part,False)
                                 # dNdpT_pT
-                                add_obs('dNdpT_pT',current_b,part)
+                                add_obs('dNdpT_pT',current_b,part,False)
                                 # dNdmT_mT
-                                add_obs('dNdmT_mT',current_b,part)
+                                add_obs('dNdmT_mT',current_b,part,False)
                             # dNBBBARdy_y
-                            add_obs('dNBBBARdy_y',current_b) 
+                            add_obs('dNBBBARdy_y',current_b,None,False) 
+                            
 
             end = time.time()
             print(f'Took in total {end-start}s for the analysis')
