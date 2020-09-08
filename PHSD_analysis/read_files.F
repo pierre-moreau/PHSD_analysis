@@ -27,7 +27,7 @@ C P.Moreau - Sept. 2020
       SUBROUTINE ALLOCATE_particles(N_particles)
       integer, intent(out) :: N_particles
 
-      OPEN(5,FILE='./analysis_files/particle_info.dat',STATUS='OLD')
+      OPEN(5,FILE='./particle_info.dat',STATUS='OLD')
       READ(5,*) N_particles
 
       ! + charged particles
@@ -51,7 +51,7 @@ C P.Moreau - Sept. 2020
       SUBROUTINE ALLOCATE_paths(N_paths)
       integer, intent(out) :: N_paths
 
-      OPEN(5,FILE='./analysis_files/path_phsd.dat',STATUS='OLD')
+      OPEN(5,FILE='./path_phsd.dat',STATUS='OLD')
       READ(5,*) N_paths
       
       allocate(list_paths(1:N_paths))
@@ -122,7 +122,7 @@ C P.Moreau - Sept. 2020
       real, parameter :: pi=4.*ATAN(1.)
       
       ! read information about the analysis
-      OPEN(4,FILE='./analysis_files/inputf.dat',STATUS='OLD')
+      OPEN(4,FILE='./inputf.dat',STATUS='OLD')
 
       READ(4,*) BMIN
       READ(4,*) xBMIN
@@ -399,9 +399,9 @@ C P.Moreau - Sept. 2020
       
       DO ib=1,Nb
         CALL b_to_string(list_b_all(ib),string_b)
-        OPEN(4,FILE='./analysis_files/Nevents_b'//trim(string_b)
+        OPEN(4,FILE='./Nevents_b'//trim(string_b)
      &               //'.dat',STATUS='NEW')
-        OPEN(5,FILE='./analysis_files/Npart_b'//trim(string_b)
+        OPEN(5,FILE='./Npart_b'//trim(string_b)
      &               //'.dat',STATUS='NEW')
           WRITE(4,*) N_events_b(ib)
           WRITE(5,*) N_part_b(ib,1),N_part_b(ib,2)
@@ -413,13 +413,13 @@ C P.Moreau - Sept. 2020
         CALL b_to_string(list_b_all(ib),string_b)
         DO IP=1,N_particles
           if(IP.eq.14 .or. IP.eq.15) CYCLE ! Skip Sigma0 & Sigma~0
-          OPEN(4,FILE='./analysis_files/dNdy_b'//trim(string_b)
+          OPEN(4,FILE='./dNdy_b'//trim(string_b)
      &              //'_'//trim(particle_name(IP))//'.dat',STATUS='NEW')
-          OPEN(5,FILE='./analysis_files/dNdeta_b'//trim(string_b)
+          OPEN(5,FILE='./dNdeta_b'//trim(string_b)
      &              //'_'//trim(particle_name(IP))//'.dat',STATUS='NEW')
-          OPEN(6,FILE='./analysis_files/mean_pT_b'//trim(string_b)
+          OPEN(6,FILE='./mean_pT_b'//trim(string_b)
      &              //'_'//trim(particle_name(IP))//'.dat',STATUS='NEW')
-          OPEN(7,FILE='./analysis_files/N_mean_pT_b'//trim(string_b)
+          OPEN(7,FILE='./N_mean_pT_b'//trim(string_b)
      &              //'_'//trim(particle_name(IP))//'.dat',STATUS='NEW')
           
             WRITE(4,*) dNdy_b(ib,IP,1),dNdy_b(ib,IP,2)
@@ -437,13 +437,13 @@ C P.Moreau - Sept. 2020
         CALL b_to_string(list_b_all(ib),string_b)
         DO IP=1,N_particles
           if(IP.eq.14 .or. IP.eq.15) CYCLE ! Skip Sigma0 & Sigma~0
-          OPEN(4,FILE='./analysis_files/dNdpT_pT_b'//trim(string_b)
+          OPEN(4,FILE='./dNdpT_pT_b'//trim(string_b)
      &              //'_'//trim(particle_name(IP))//'.dat',STATUS='NEW')
-          OPEN(5,FILE='./analysis_files/dNdmT_mT_b'//trim(string_b)
+          OPEN(5,FILE='./dNdmT_mT_b'//trim(string_b)
      &              //'_'//trim(particle_name(IP))//'.dat',STATUS='NEW')
-          OPEN(6,FILE='./analysis_files/dNdeta_eta_b'//trim(string_b)
+          OPEN(6,FILE='./dNdeta_eta_b'//trim(string_b)
      &              //'_'//trim(particle_name(IP))//'.dat',STATUS='NEW')
-          OPEN(7,FILE='./analysis_files/dNdy_y_b'//trim(string_b)
+          OPEN(7,FILE='./dNdy_y_b'//trim(string_b)
      &              //'_'//trim(particle_name(IP))//'.dat',STATUS='NEW')
           DO ipT=0,NpT
             WRITE(4,*) dNdpT_pT(ib,IP,ipT,1),dNdpT_pT(ib,IP,ipT,2)
@@ -462,7 +462,7 @@ C P.Moreau - Sept. 2020
           CLOSE(6)
           CLOSE(7)
         END DO
-        OPEN(8,FILE='./analysis_files/dNBBBARdy_y_b'//trim(string_b)
+        OPEN(8,FILE='./dNBBBARdy_y_b'//trim(string_b)
      &              //'.dat',STATUS='NEW')
           DO iy=-Ny,Ny
             WRITE(8,*) dNBBBARdy_y(ib,iy,1),dNBBBARdy_y(ib,iy,2)

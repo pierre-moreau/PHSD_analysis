@@ -7,7 +7,7 @@ from . import *
 from EoS_HRG.test.plot_HRG import plot_freezeout
 import time
 import subprocess
-import shutil
+import tempfile
 
 ###############################################################################
 __doc__ = """Analyse the PHSD.dat files, output and plot observables"""
@@ -247,76 +247,66 @@ def read_data_F(path_files,inputf):
     All necessary data/information are transferred in temporary folder /analysis_files/
     """
 
-    # directory to store results and information
-    resdir = path+'analysis_files/'
-    # check if the directory already exists
-    # if yes, delete
-    if(os.path.exists(resdir)):
-        shutil.rmtree(resdir)
-    # create directory
-    os.makedirs(resdir)
-
-    # output quantities from inputf
-    with open(resdir+'inputf.dat','w') as input_file:
-        for val in ['BMIN','xBMIN','BMAX','xBMAX','DBIMP','ISUBS','NUM','MASSTA','MASSPR','y',\
-            'midrapy','midrapeta','ybin','ylim','etabin','etalim','pTbin','pTmax','mTbin','mTmax']:
-            input_file.write(f'{inputf[val]},{val}\n')
-
-    # output paths of phsd.dat files
-    with open(resdir+'path_phsd.dat','w') as path_file:
-        path_file.write(f'{len(path_files)}\n')
-        for val in path_files:
-            path_file.write(f'{val}\n')
-
-    # output particle information
-    with open(resdir+'particle_info.dat','w') as particle_file:
-        particle_file.write(f'{len(particle_info)}\n')
-        for val in particle_info:
-            particle_file.write(f'{particle_info[val][3]},{val},{particle_info[val][0]},{particle_info[val][1]},{particle_info[val][2]}\n')
-
-    # execute subroutines to read files
-    start = time.time()
-    # change working directory
-    os.chdir(path)
-    # compile fortran program if it doesn't exist yet
-    if(not(os.path.exists(f'{dir_path}/read_files_F'))):
-        print('Compilation of Fortran code to read files\n')
-        subprocess.run(['gfortran','-O3','-g','-fbacktrace',f'{dir_path}/read_files.F', '-o',f'{dir_path}/read_files_F'])
-    # execute fortran program
-    subprocess.run([f'{dir_path}/read_files_F'])
-    # come back to original working directory
-    os.chdir(cwd)
-    end = time.time()
-    print(f'Took in total {end-start}s for the analysis')
-
     ########################################################################
     def load_data(string_obs,xb,part=None):
         """
         Read data produced in folder /analysis_files/
         """
         if(part==None):
-            return np.loadtxt(f'{resdir}{string_obs}_b{int(10.*xb):03d}.dat')
+            return np.loadtxt(f'./{string_obs}_b{int(10.*xb):03d}.dat')
         else:
-            return np.loadtxt(f'{resdir}{string_obs}_b{int(10.*xb):03d}_{part}.dat')
+            return np.loadtxt(f'./{string_obs}_b{int(10.*xb):03d}_{part}.dat')
 
-    dict_obs = {}
-    # create new entry for each b in dict if it doesn't already exist
-    for xb in list_b_all:
-        dict_obs.update({f'Nevents(b={xb})': load_data('Nevents',xb)})
-        dict_obs.update({f'Npart(b={xb})': load_data('Npart',xb)})
-        for part in particle_analysis:
-            dict_obs.update({f'dNdeta(b={xb};{part})': load_data('dNdeta',xb,part)})
-            dict_obs.update({f'dNdy(b={xb};{part})': load_data('dNdy',xb,part)})
-            dict_obs.update({f'mean_pT(b={xb};{part})': load_data('mean_pT',xb,part)})
-            dict_obs.update({f'N_mean_pT(b={xb};{part})': load_data('N_mean_pT',xb,part)})
-            dict_obs.update({f'dNdeta_eta(b={xb};{part})': load_data('dNdeta_eta',xb,part)})
-            dict_obs.update({f'dNdy_y(b={xb};{part})': load_data('dNdy_y',xb,part)})
-            dict_obs.update({f'dNdpT_pT(b={xb};{part})': load_data('dNdpT_pT',xb,part)})
-            dict_obs.update({f'dNdmT_mT(b={xb};{part})': load_data('dNdmT_mT',xb,part)})
-        dict_obs.update({f'dNBBBARdy_y(b={xb})': load_data('dNBBBARdy_y',xb)})
+    ########################################################################
+    # create temporary folder
+    with tempfile.TemporaryDirectory(prefix='PHSD-', dir=path) as resdir:
+        # change working directory
+        os.chdir(resdir)
 
-    # delete entire directory /analyis_files/
-    shutil.rmtree(resdir)
+        # output quantities from inputf
+        with open('./inputf.dat','w') as input_file:
+            for val in ['BMIN','xBMIN','BMAX','xBMAX','DBIMP','ISUBS','NUM','MASSTA','MASSPR','y',\
+                'midrapy','midrapeta','ybin','ylim','etabin','etalim','pTbin','pTmax','mTbin','mTmax']:
+                input_file.write(f'{inputf[val]},{val}\n')
+
+        # output paths of phsd.dat files
+        with open('./path_phsd.dat','w') as path_file:
+            path_file.write(f'{len(path_files)}\n')
+            for val in path_files:
+                path_file.write(f'{val}\n')
+
+        # output particle information
+        with open('./particle_info.dat','w') as particle_file:
+            particle_file.write(f'{len(particle_info)}\n')
+            for val in particle_info:
+                particle_file.write(f'{particle_info[val][3]},{val},{particle_info[val][0]},{particle_info[val][1]},{particle_info[val][2]}\n')
+
+        # execute subroutines to read files
+        start = time.time()
+        # compile fortran program if it doesn't exist yet
+        #if(not(os.path.exists(f'{dir_path}/read_files_F'))):
+        print('Compilation of Fortran code to read files\n')
+        subprocess.run(['gfortran','-O3','-g','-fbacktrace',f'{dir_path}/read_files.F', '-o',f'{dir_path}/read_files_F'])
+        # execute fortran program
+        subprocess.run([f'{dir_path}/read_files_F'])
+        end = time.time()
+        print(f'Took in total {end-start}s for the analysis')
+
+        dict_obs = {}
+        # create new entry for each b in dict if it doesn't already exist
+        for xb in list_b_all:
+            dict_obs.update({f'Nevents(b={xb})': load_data('Nevents',xb)})
+            dict_obs.update({f'Npart(b={xb})': load_data('Npart',xb)})
+            for part in particle_analysis:
+                dict_obs.update({f'dNdeta(b={xb};{part})': load_data('dNdeta',xb,part)})
+                dict_obs.update({f'dNdy(b={xb};{part})': load_data('dNdy',xb,part)})
+                dict_obs.update({f'mean_pT(b={xb};{part})': load_data('mean_pT',xb,part)})
+                dict_obs.update({f'N_mean_pT(b={xb};{part})': load_data('N_mean_pT',xb,part)})
+                dict_obs.update({f'dNdeta_eta(b={xb};{part})': load_data('dNdeta_eta',xb,part)})
+                dict_obs.update({f'dNdy_y(b={xb};{part})': load_data('dNdy_y',xb,part)})
+                dict_obs.update({f'dNdpT_pT(b={xb};{part})': load_data('dNdpT_pT',xb,part)})
+                dict_obs.update({f'dNdmT_mT(b={xb};{part})': load_data('dNdmT_mT',xb,part)})
+            dict_obs.update({f'dNBBBARdy_y(b={xb})': load_data('dNBBBARdy_y',xb)})
     
     return dict_obs
 
