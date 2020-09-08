@@ -30,6 +30,7 @@ setup(
     author_email='pierre.moreau@duke.edu',
     url='https://github.com/pierre-moreau/PHSD_analysis',
     packages=['PHSD_analysis'],
+    package_data={'PHSD_analysis':['read_files.F']},
     license='MIT',
     install_requires=requirements(),
     classifiers=[

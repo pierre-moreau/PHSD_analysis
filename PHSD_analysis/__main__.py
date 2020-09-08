@@ -3,11 +3,11 @@ import re
 import pandas as pd
 import argparse
 from numpy import pi
-from scipy import stats
 from . import *
 from EoS_HRG.test.plot_HRG import plot_freezeout
 import time
-from tqdm import trange
+import subprocess
+import shutil
 
 ###############################################################################
 __doc__ = """Analyse the PHSD.dat files, output and plot observables"""
@@ -67,7 +67,13 @@ dy = 2.*midrapy
 
 ########################################################################
 dir_path = os.path.dirname(os.path.realpath(__file__)) # path where the script is
-print(f'Current directory: {dir_path}')
+cwd = os.getcwd() 
+if(path=='./'):
+    path = cwd+'/'
+else:
+    path = cwd+'/'+path+'/' 
+print(f'Analysis files are: {dir_path}')
+print(f'Current working directory: {cwd}')
 print(f'Looking for files in: {path}')
 
 ########################################################################
@@ -129,7 +135,8 @@ def read_input(path_input):
             list_line=line.split()
             if(len(list_line)==0):
                 continue
-            inputf.update({list_line[1].replace(':',''): float(list_line[0].replace(',',''))})
+            x = list_line[0].replace(',','')
+            inputf.update({list_line[1].replace(':',''): float(x) if '.' in x else int(x)})
 
     global xBMIN
     global xBMAX
@@ -144,6 +151,11 @@ def read_input(path_input):
     elif((xBMAX!=None) and (xBMAX > inputf['BMAX'])):
         xBMAX = inputf['BMAX']
         print('Entered BMAX changed to max value in b')
+    
+    inputf.update({'xBMIN':xBMIN,'xBMAX':xBMAX})
+
+    global list_b_all
+    list_b_all = np.arange(start=inputf["BMIN"],stop=inputf["BMAX"]+0.0001,step=inputf['DBIMP'])
 
     # nuclei information
     N1 = nuclei[inputf["MASSTA"]]
@@ -193,9 +205,11 @@ def read_input(path_input):
     inputf.update({'collstring': f'{N1}{N2}{int(SRT)}GeV_'})
 
     # select particles in abs(y) < ylim or abs(eta) < etalim
-    global etalim, ylim
     etalim = int(round(inputf['y'])+1)
     ylim = int(round(inputf['y'])+1)
+    inputf.update({'etalim': etalim,'ylim': ylim})
+    inputf.update({'etabin': etabin,'ybin': ybin})
+    inputf.update({'midrapeta': midrapeta,'midrapy': midrapy})
 
     # list of y and eta for each bin
     global list_eta,list_y,edges_eta,edges_y
@@ -203,17 +217,21 @@ def read_input(path_input):
     list_y = np.arange(start=-ylim,stop=ylim+0.0001,step=ybin)  
     edges_eta = np.arange(start=-etalim-etabin/2.,stop=etalim+etabin/2.+0.0001,step=etabin)
     edges_y = np.arange(start=-ylim-ybin/2.,stop=ylim+ybin/2.+0.0001,step=ybin)
+    inputf.update({'edges_eta': edges_eta,'edges_y': edges_y})
+    inputf.update({'etabin': etabin,'ybin': ybin})
 
     # max values of pT, mT
-    global pTmax,mTmax
     pTmax = 4.
     mTmax = 4.
+    inputf.update({'pTmax': pTmax,'mTmax': mTmax})
+    inputf.update({'pTbin': pTbin,'mTbin': mTbin})
     # list of mT and pT for each bin
     global list_pT,list_mT,edges_pT,edges_mT
     list_pT = np.arange(start=pTbin/2.,stop=pTmax-pTbin/2.+0.0001,step=pTbin)
     list_mT = np.arange(start=mTbin/2.,stop=mTmax-mTbin/2.+0.0001,step=mTbin)
     edges_pT = np.arange(start=0.,stop=pTmax+0.0001,step=pTbin)
     edges_mT = np.arange(start=0.,stop=mTmax+0.0001,step=mTbin)
+    inputf.update({'edges_pT': edges_pT,'edges_mT': edges_mT})
 
     # display information about the collision
     print(f'{N1}+{N2} at $\sqrt{{s_{{NN}}}}$ = {SRT:4.1f} GeV -- TLAB = {TLAB} GeV -- yproj = {yproj}')
@@ -223,12 +241,90 @@ def read_input(path_input):
     return inputf
 
 ########################################################################
+def read_data_F(path_files,inputf):
+    """
+    Interface to read_files.F
+    All necessary data/information are transferred in temporary folder /analysis_files/
+    """
+
+    # directory to store results and information
+    resdir = path+'analysis_files/'
+    # check if the directory already exists
+    # if yes, delete
+    if(os.path.exists(resdir)):
+        shutil.rmtree(resdir)
+    # create directory
+    os.makedirs(resdir)
+
+    # output quantities from inputf
+    with open(resdir+'inputf.dat','w') as input_file:
+        for val in ['BMIN','xBMIN','BMAX','xBMAX','DBIMP','ISUBS','NUM','MASSTA','MASSPR','y',\
+            'midrapy','midrapeta','ybin','ylim','etabin','etalim','pTbin','pTmax','mTbin','mTmax']:
+            input_file.write(f'{inputf[val]},{val}\n')
+
+    # output paths of phsd.dat files
+    with open(resdir+'path_phsd.dat','w') as path_file:
+        path_file.write(f'{len(path_files)}\n')
+        for val in path_files:
+            path_file.write(f'{val}\n')
+
+    # output particle information
+    with open(resdir+'particle_info.dat','w') as particle_file:
+        particle_file.write(f'{len(particle_info)}\n')
+        for val in particle_info:
+            particle_file.write(f'{particle_info[val][3]},{val},{particle_info[val][0]},{particle_info[val][1]},{particle_info[val][2]}\n')
+
+    # execute subroutines to read files
+    start = time.time()
+    # change working directory
+    os.chdir(path)
+    # compile fortran program if it doesn't exist yet
+    if(not(os.path.exists(f'{dir_path}/read_files_F'))):
+        print('Compilation of Fortran code to read files\n')
+        subprocess.run(['gfortran','-O3','-g','-fbacktrace',f'{dir_path}/read_files.F', '-o',f'{dir_path}/read_files_F'])
+    # execute fortran program
+    subprocess.run([f'{dir_path}/read_files_F'])
+    # come back to original working directory
+    os.chdir(cwd)
+    end = time.time()
+    print(f'Took in total {end-start}s for the analysis')
+
+    ########################################################################
+    def load_data(string_obs,xb,part=None):
+        """
+        Read data produced in folder /analysis_files/
+        """
+        if(part==None):
+            return np.loadtxt(f'{resdir}{string_obs}_b{int(10.*xb):03d}.dat')
+        else:
+            return np.loadtxt(f'{resdir}{string_obs}_b{int(10.*xb):03d}_{part}.dat')
+
+    dict_obs = {}
+    # create new entry for each b in dict if it doesn't already exist
+    for xb in list_b_all:
+        dict_obs.update({f'Nevents(b={xb})': load_data('Nevents',xb)})
+        dict_obs.update({f'Npart(b={xb})': load_data('Npart',xb)})
+        for part in particle_analysis:
+            dict_obs.update({f'dNdeta(b={xb};{part})': load_data('dNdeta',xb,part)})
+            dict_obs.update({f'dNdy(b={xb};{part})': load_data('dNdy',xb,part)})
+            dict_obs.update({f'mean_pT(b={xb};{part})': load_data('mean_pT',xb,part)})
+            dict_obs.update({f'N_mean_pT(b={xb};{part})': load_data('N_mean_pT',xb,part)})
+            dict_obs.update({f'dNdeta_eta(b={xb};{part})': load_data('dNdeta_eta',xb,part)})
+            dict_obs.update({f'dNdy_y(b={xb};{part})': load_data('dNdy_y',xb,part)})
+            dict_obs.update({f'dNdpT_pT(b={xb};{part})': load_data('dNdpT_pT',xb,part)})
+            dict_obs.update({f'dNdmT_mT(b={xb};{part})': load_data('dNdmT_mT',xb,part)})
+        dict_obs.update({f'dNBBBARdy_y(b={xb})': load_data('dNBBBARdy_y',xb)})
+
+    # delete entire directory /analyis_files/
+    shutil.rmtree(resdir)
+    
+    return dict_obs
+
+########################################################################
 def read_data(path_files,inputf):
     """
     read all the phsd.dat files specified in path_files
     """
-
-    list_b_all = np.arange(start=inputf["BMIN"],stop=inputf["BMAX"]+0.0001,step=inputf['DBIMP'])
 
     # create dictionnary containing information about all observables of interests
     # dict_obs[<Observable>(b=<impact parameter>;<particle name>)]
@@ -326,7 +422,7 @@ def read_data(path_files,inputf):
                 if(xb>xBMAX):
                     break
                 # loop inside impact parameters over ISUB
-                for ISUB in range(int(inputf["ISUBS"])):
+                for ISUB in range(inputf["ISUBS"]):
 
                     if(xb<xBMIN):
                         print(f'   - ISUB = {ISUB+1} ; B = {xb} fm ; (not counted)')
@@ -334,7 +430,7 @@ def read_data(path_files,inputf):
                         print(f'   - ISUB = {ISUB+1} ; B = {xb} fm')
 
                     # loop inside ISUB over NUM
-                    for _ in trange(int(inputf["NUM"]),desc='     NUM'):
+                    for _ in range(inputf["NUM"]):
 
                         try:
                             # header (1st line)
@@ -454,8 +550,7 @@ def read_data(path_files,inputf):
                                 # dNdmT_mT
                                 add_obs('dNdmT_mT',current_b,part,False)
                             # dNBBBARdy_y
-                            add_obs('dNBBBARdy_y',current_b,None,False) 
-                            
+                            add_obs('dNBBBARdy_y',current_b,None,False)  
 
             end = time.time()
             print(f'Took in total {end-start}s for the analysis')
@@ -472,7 +567,6 @@ def calculate_obs(dict_obs,inputf,particles):
 
     # list of impact parameters
     # which b to select for output?
-    list_b_all = np.arange(start=inputf["BMIN"],stop=inputf["BMAX"]+0.0001,step=inputf['DBIMP'])
     list_b = list_b_all[(xBMIN <= list_b_all) & (list_b_all <= xBMAX)]
 
     # nuclei information
@@ -840,7 +934,8 @@ def main():
 
     path_input, path_files = detect_files()
     inputf = read_input(path_input)
-    dict_obs = read_data(path_files,inputf)
+    dict_obs = read_data_F(path_files,inputf)
+    #dict_obs = read_data(path_files,inputf)
     calculate_obs(dict_obs,inputf,particles)
     del particles,path_input,path_files,inputf,dict_obs
 

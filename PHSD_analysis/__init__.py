@@ -2,7 +2,7 @@
 To analyze and plot heavy-ion collision data produced by the Parton-Hadron-String Dynamics (PHSD) model.
 """
 
-__version__ = '1.7.0'
+__version__ = '2.0.0'
 
 from matplotlib.pyplot import rc
 import matplotlib.pyplot as pl
