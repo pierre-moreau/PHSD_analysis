@@ -257,8 +257,9 @@ C P.Moreau - Sept. 2020
 
                 mass = particle_mass(IP)
 
+                if(P0-abs(PZ).lt.1E-10) CYCLE
                 y=0.5*log((P0+PZ)/(P0-PZ))
-
+                
                 if(IP.eq.8 .or. IP.eq.10) then
                 ! if |y| > yproj-0.5, don't count
                 ! 0.5 is arbitrary, but works fine
@@ -273,8 +274,9 @@ C P.Moreau - Sept. 2020
                   IP=13
                 end if
 
-                eta=0.5*log((sqrt(PX**2+PY**2+PZ**2)+PZ) 
-     &                     /(sqrt(PX**2+PY**2+PZ**2)-PZ))
+                PP=sqrt(PX**2+PY**2+PZ**2)
+                if(PP-abs(PZ).lt.1E-10) CYCLE
+                eta=0.5*log((PP+PZ)/(PP-PZ))
                 pT=sqrt(PX**2+PY**2)
                 mT=sqrt(pT**2.+mass**2.)
                 phi = atan2(PY,PX)

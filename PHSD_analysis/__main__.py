@@ -262,6 +262,7 @@ def read_data_F(path_files,inputf):
     with tempfile.TemporaryDirectory(prefix='PHSD-', dir=path) as resdir:
         # change working directory
         os.chdir(resdir)
+        print(f'Current working directory: {resdir}')
 
         # output quantities from inputf
         with open('./inputf.dat','w') as input_file:
@@ -286,7 +287,10 @@ def read_data_F(path_files,inputf):
         # compile fortran program if it doesn't exist yet
         #if(not(os.path.exists(f'{dir_path}/read_files_F'))):
         print('Compilation of Fortran code to read files\n')
-        subprocess.run(['gfortran','-O3','-g','-fbacktrace',f'{dir_path}/read_files.F', '-o',f'{dir_path}/read_files_F'])
+        try:
+            subprocess.run(['gfortran','-O3','-g','-fbacktrace',f'{dir_path}/read_files.F', '-o',f'{dir_path}/read_files_F'])
+        except:
+            subprocess.run(['ifort','-O3','-g','-traceback','-debug','all',f'{dir_path}/read_files.F', '-o',f'{dir_path}/read_files_F'])
         # execute fortran program
         subprocess.run([f'{dir_path}/read_files_F'])
         end = time.time()
