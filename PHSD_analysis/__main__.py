@@ -774,6 +774,8 @@ def calculate_obs(dict_obs,inputf,particles):
         # dN/dy & dN/deta
         dNdeta = np.zeros((len(list_eta),len(particles),2))
         dNdy = np.zeros((len(list_y),len(particles),2))
+        # dN/dy of quarks
+        dNqdy = np.zeros((len(list_y),len(list_quarks),2))
         # normalization for sum over b
         Anormb = sum([2.*pi*xb*inputf['DBIMP'] for xb in list_b])
         for xb in list_b:
@@ -786,9 +788,14 @@ def calculate_obs(dict_obs,inputf,particles):
                 dNdeta[:,ip] += return_obs('dNdeta_eta',xb,part=part,weight=weightb,squared=True)
                 dNdy[:,ip] += return_obs('dNdy_y',xb,part=part,weight=weightb,squared=True)
 
+            for ip,part in enumerate(particles_of_interest):
+                nq = N_quarks(part)
+                dNqdy += [ [[val*xnq,val2*xnq**2.] for xnq in nq] for val,val2 in return_obs('dNdy_y',xb,part=part,weight=weightb,squared=True)]
+
         # calculate standard mean error as \sigma = sqrt( \sum_i \sigma(b_i)**2.)
         dNdeta[:,:,1] = np.sqrt(dNdeta[:,:,1]) 
         dNdy[:,:,1] = np.sqrt(dNdy[:,:,1])
+        dNqdy[:,:,1] = np.sqrt(dNqdy[:,:,1])
 
         dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_eta).T,dNdeta.reshape((len(list_eta),len(particles)*2))),axis=1), columns=['eta']+label_part)
         dict_out.to_csv(path+out_str+'dNdeta_eta.csv', index=False, header=True)
@@ -798,7 +805,11 @@ def calculate_obs(dict_obs,inputf,particles):
         dict_out.to_csv(path+out_str+'dNdy_y.csv', index=False, header=True)
         plot_quant(dict_out,r'$y$',f'$dN/dy$',plot_title,path+out_str+'dNdy_y',log=True)
 
-        del dNchdeta,dNchdy,dNdeta,dNdy,dict_out
+        dict_out = pd.DataFrame(np.concatenate((np.atleast_2d(list_y).T,dNqdy.reshape((len(list_y),len(list_quarks)*2))),axis=1), columns=['y']+[latex_quarks[q]+suffix for q in list_quarks for suffix in ['','_err']])
+        dict_out.to_csv(path+out_str+'dNqdy_y.csv', index=False, header=True)
+        plot_quant(dict_out,r'$y$',f'$dN_q/dy$',plot_title,path+out_str+'dNqdy_y',log=True)
+
+        del dNchdeta,dNchdy,dNdeta,dNdy,dNqdy,dict_out
 
     ####################################################################
     # stopping as a function of y

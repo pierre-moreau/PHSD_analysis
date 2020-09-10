@@ -24,8 +24,56 @@ nuclei = {1:'p', 2:'d', 12:'C', 16:'O', 40: 'Ca', 63: 'Cu', 129: 'Xe',197:'Au', 
 DMN = 0.938 # nucleon mass
 ########################################################################
 # list of particles of interest with KF conversion, masses, latex label:
-particles_of_interest = ['pi+','pi-','K+','K-','K0','K~0','eta','p','p~','n','n~','Lambda','Lambda~',\
-  'Sigma0','Sigma~0','Sigma-','Sigma~+','Sigma+','Sigma~-','Xi-','Xi~+','Xi0','Xi~0','Omega-','Omega~+']
+particles_of_interest = ['pi+','pi-','pi0','K+','K-','K0','K~0','eta','p','p~','n','n~','Lambda','Lambda~',\
+  'Sigma0','Sigma~0','Sigma-','Sigma~+','Sigma+','Sigma~-','Xi-','Xi~+','Xi0','Xi~0','Omega-','Omega~+',\
+    'D-','D+','D0','D~0','D(s)+','D(s)-','B-','B+','B0','B~0','B(s)0','B(s)~0']
+
+list_quarks = ['u','d','s','c','b','U','D','S','C','B']
+latex_quarks = dict(zip(list_quarks,['u','d','s','c','b','\\bar{u}','\\bar{d}','\\bar{s}','\\bar{c}','\\bar{b}']))
+
+########################################################################
+def N_quarks(particle_name):
+    """
+    Return number of quarks contained in a given particle
+    """
+    # convert to particle object
+    try:
+      part_obj = Particle.find(lambda p: p.name==particle_name)
+    except:
+      part_obj = Particle.findall(lambda p: p.name==particle_name)[0]
+    # string containing the quark content
+    string_quarks = part_obj.quarks
+    # initialize array
+    count = np.zeros(len(list_quarks))
+    # special cases
+    if(particle_name=='pi0'):
+      count[0] += 1./2.
+      count[1] += 1./2. 
+      count[5] += 1./2. 
+      count[6] += 1./2. 
+      return count
+    elif(particle_name=='eta'):
+      count[0] += 1./6.
+      count[1] += 1./6. 
+      count[2] += 2./3. 
+      count[5] += 1./6. 
+      count[6] += 1./6. 
+      count[7] += 2./3. 
+      return count
+      
+    # scan string to find occurence of quarks
+    for iq,quark in enumerate(list_quarks):
+      startIndex = 0
+      for _ in range(len(string_quarks)):
+        # find 1st occurence of quark in string, from startIndex
+        k = string_quarks.find(quark, startIndex)
+        if(k != -1):
+          # if found, count +1 and shift startIndex to look for other occurences
+          startIndex = k+1
+          count[iq] += 1.
+          k = 0
+
+    return count
 
 # create a list containing name of particles of interests for the analysis
 particle_analysis = particles_of_interest[:]
@@ -48,6 +96,9 @@ for ipart,name in enumerate(particles_of_interest):
     xname = 'Lambda~'
   particle_info.update({int(ID): [xname,part_obj.mass/1000.,np.sign(ID)*ID.is_baryon,ipart]})
   latex_name.update({name: r'$'+part_obj.latex_name+'$'})
+
+particles_of_interest.remove('Sigma0')
+particles_of_interest.remove('Sigma~0')
 
 ########################################################################
 # settings for plots
@@ -133,8 +184,7 @@ def plot_quant(df,xlabel,ylabel,title,outname,log=False):
     line = ax.plot(data_x, data_y, linewidth='2.5', label=label)
     ax.fill_between(data_x, data_y-data_y_err, data_y+data_y_err, alpha=0.5, color=line[0].get_color())
     if(label!=None):
-      ax.legend(title_fontsize=SMALL_SIZE, loc='best', borderaxespad=0., frameon=False)
-
+      ax.legend(title_fontsize=SMALL_SIZE, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0., frameon=False)
     if(log):
       ax.set_yscale("log")
     else:
